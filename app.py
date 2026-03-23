@@ -117,7 +117,8 @@ def get_layout_base() -> dict:
     return dict(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(t=30, b=30, l=10, r=10),
+        margin=dict(t=60, b=40, l=10, r=10),
+        yaxis=dict(automargin=True, title_standoff=10),
     )
 
 LAYOUT_BASE = get_layout_base()
@@ -315,7 +316,7 @@ with tab_pros:
                     name="Prospectos Únicos",
                     marker_color=COLORES_PRINCIPALES["azul"],
                     text=ranking_df["Prospectos Únicos"],
-                    textposition="outside",
+                    textposition="outside", cliponaxis=False,
                 ))
                 fig_rank.add_trace(go.Bar(
                     x=ranking_df[COL_VENDEDOR],
@@ -323,15 +324,15 @@ with tab_pros:
                     name="Cierres",
                     marker_color=COLORES_PRINCIPALES["verde"],
                     text=ranking_df["Cierres"],
-                    textposition="outside",
+                    textposition="outside", cliponaxis=False,
                 ))
                 fig_rank.update_layout(
                     **LAYOUT_BASE,
                     barmode="group",
-                    height=340,
+                    height=420,
                     xaxis_title="",
                     yaxis_title="",
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1),
                 )
                 st.plotly_chart(fig_rank, use_container_width=True, theme="streamlit")
 
@@ -395,7 +396,7 @@ with tab_pros:
                 color_continuous_scale=bar_scale("#4f8ef7"),
                 text="Visitas",
             )
-            fig_ciudad.update_traces(textposition="outside")
+            fig_ciudad.update_traces(textposition="outside", cliponaxis=False)
             fig_ciudad.update_layout(**LAYOUT_BASE, height=320,
                                       xaxis_title="", yaxis_title="Nº Visitas",
                                       coloraxis_showscale=False)
@@ -464,7 +465,7 @@ with tab_pros:
                 color_continuous_scale=bar_scale("#1fc98e"),
                 text="Nº Visitas",
             )
-            fig_freq.update_traces(textposition="outside")
+            fig_freq.update_traces(textposition="outside", cliponaxis=False)
             fig_freq.update_layout(**LAYOUT_BASE, height=340,
                                     xaxis_title="", yaxis_title="Nº Visitas",
                                     xaxis_tickangle=-35, coloraxis_showscale=False)
@@ -521,7 +522,7 @@ with tab_pros:
             color_continuous_scale=bar_scale("#9b74f7"),
             text="Visitas",
         )
-        fig_sem.update_traces(textposition="outside")
+        fig_sem.update_traces(textposition="outside", cliponaxis=False)
         fig_sem.update_layout(**LAYOUT_BASE, height=340,
                                xaxis_title="", yaxis_title="Nº Visitas",
                                coloraxis_showscale=False)
@@ -553,6 +554,72 @@ with tab_mant:
                    help="Cantidad de visitas registradas con motivo TOMAR PEDIDO.")
         km3.metric("Tasa de Conversión", f"{tasa_conv_mant}%",
                    help="Visitas con motivo TOMAR PEDIDO / total visitas de mantenimiento.")
+
+        # ── Ranking por Vendedor (solo cuando se muestran todos) ──────────────────
+        if sel_vendedor == "Todos":
+            st.markdown("### 🏆 Ranking por Vendedor")
+            st.caption("Total de visitas y visitas con pedido por vendedor en el rango de fechas seleccionado.")
+
+            # Total visitas por vendedor
+            rank_mant = (
+                df_mant.groupby(COL_VENDEDOR)
+                .size()
+                .reset_index(name="Total Visitas")
+            )
+
+            # Visitas con pedido por vendedor
+            pedidos_vend = (
+                df_mant[df_mant[COL_MOTIVO] == "TOMAR PEDIDO"]
+                .groupby(COL_VENDEDOR)
+                .size()
+                .reset_index(name="Con Pedido")
+            )
+
+            ranking_m_df = (
+                rank_mant
+                .merge(pedidos_vend, on=COL_VENDEDOR, how="left")
+                .fillna({"Con Pedido": 0})
+                .sort_values("Total Visitas", ascending=False)
+            )
+            ranking_m_df["Con Pedido"] = ranking_m_df["Con Pedido"].astype(int)
+
+            col_mrank1, col_mrank2 = st.columns([3, 2])
+            with col_mrank1:
+                fig_mrank = go.Figure()
+                fig_mrank.add_trace(go.Bar(
+                    x=ranking_m_df[COL_VENDEDOR],
+                    y=ranking_m_df["Total Visitas"],
+                    name="Total Visitas",
+                    marker_color=COLORES_PRINCIPALES["azul"],
+                    text=ranking_m_df["Total Visitas"],
+                    textposition="outside",
+                    cliponaxis=False,
+                ))
+                fig_mrank.add_trace(go.Bar(
+                    x=ranking_m_df[COL_VENDEDOR],
+                    y=ranking_m_df["Con Pedido"],
+                    name="Con Pedido",
+                    marker_color=COLORES_PRINCIPALES["amarillo"],
+                    text=ranking_m_df["Con Pedido"],
+                    textposition="outside",
+                    cliponaxis=False,
+                ))
+                fig_mrank.update_layout(
+                    **LAYOUT_BASE,
+                    barmode="group",
+                    height=420,
+                    xaxis_title="",
+                    yaxis_title="",
+                    legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1),
+                )
+                st.plotly_chart(fig_mrank, use_container_width=True, theme="streamlit")
+
+            with col_mrank2:
+                tabla_mrank = ranking_m_df[[COL_VENDEDOR, "Total Visitas", "Con Pedido"]].copy()
+                tabla_mrank["Tasa Conv."] = (
+                    tabla_mrank["Con Pedido"] / tabla_mrank["Total Visitas"] * 100
+                ).round(1).astype(str) + "%"
+                st.dataframe(tabla_mrank, use_container_width=True, hide_index=True)
 
         st.divider()
 
@@ -612,7 +679,7 @@ with tab_mant:
                 color_continuous_scale=bar_scale("#4f8ef7"),
                 text="Visitas",
             )
-            fig_mciu.update_traces(textposition="outside")
+            fig_mciu.update_traces(textposition="outside", cliponaxis=False)
             fig_mciu.update_layout(**LAYOUT_BASE, height=320,
                                     xaxis_title="", yaxis_title="Nº Visitas",
                                     coloraxis_showscale=False)
@@ -680,7 +747,7 @@ with tab_mant:
                 color_continuous_scale=bar_scale("#f7954f"),
                 text="Nº Visitas",
             )
-            fig_mfreq.update_traces(textposition="outside")
+            fig_mfreq.update_traces(textposition="outside", cliponaxis=False)
             fig_mfreq.update_layout(**LAYOUT_BASE, height=340,
                                      xaxis_title="", yaxis_title="Nº Visitas",
                                      xaxis_tickangle=-35, coloraxis_showscale=False)
@@ -722,7 +789,7 @@ with tab_mant:
             color_continuous_scale=bar_scale("#f7d14f"),
             text="Visitas",
         )
-        fig_sem_m.update_traces(textposition="outside")
+        fig_sem_m.update_traces(textposition="outside", cliponaxis=False)
         fig_sem_m.update_layout(**LAYOUT_BASE, height=340,
                                  xaxis_title="", yaxis_title="Nº Visitas",
                                  coloraxis_showscale=False)
@@ -753,4 +820,4 @@ with tab1:
 with tab2:
     st.dataframe(prep_detalle(df_mant), use_container_width=True, hide_index=True)
 with tab3:
-    st.dataframe(prep_detalle(df_pros), use_container_width=True, hide_index=True)
+    st.dataframe(prep_detalle(df_pros), use_container_width=True, hide_index=True)
