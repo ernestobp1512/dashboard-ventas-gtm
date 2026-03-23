@@ -12,91 +12,34 @@ st.set_page_config(
 )
 
 # ─── ESTILOS ───────────────────────────────────────────────────────────────────
+# Variables CSS nativas de Streamlit (--text-color, --secondary-background-color, etc.)
+# se actualizan automáticamente con el tema seleccionado por el usuario.
 st.markdown("""
 <style>
-    /* ── Variables de tema oscuro (por defecto) ── */
-    :root {
-        --bg-main:      #0f1117;
-        --bg-sidebar:   #161b27;
-        --bg-card:      #1e2535;
-        --border-card:  #2e3a55;
-        --text-primary: #e8eaf6;
-        --text-muted:   #8fa0c0;
-        --text-heading: #a0b4d0;
-        --accent:       #4f8ef7;
-    }
-
-    /* ── Overrides para tema claro de Streamlit ── */
-    [data-theme="light"],
-    .stApp[data-theme="light"] {
-        --bg-main:      #f5f7fa;
-        --bg-sidebar:   #eef1f6;
-        --bg-card:      #ffffff;
-        --border-card:  #d0d8e8;
-        --text-primary: #1a1f2e;
-        --text-muted:   #4a5568;
-        --text-heading: #2d3748;
-        --accent:       #2563eb;
-    }
-
-    /* Soporte adicional via prefers-color-scheme */
-    @media (prefers-color-scheme: light) {
-        :root {
-            --bg-main:      #f5f7fa;
-            --bg-sidebar:   #eef1f6;
-            --bg-card:      #ffffff;
-            --border-card:  #d0d8e8;
-            --text-primary: #1a1f2e;
-            --text-muted:   #4a5568;
-            --text-heading: #2d3748;
-            --accent:       #2563eb;
-        }
-    }
-
-    /* Fondo general */
-    [data-testid="stAppViewContainer"] { background-color: var(--bg-main) !important; }
-    [data-testid="stSidebar"]          { background-color: var(--bg-sidebar) !important; }
-    .main .block-container             { background-color: var(--bg-main) !important; }
-
-    /* Cards de métricas */
+    /* Cards de métricas — usa variables CSS de Streamlit */
     [data-testid="metric-container"] {
-        background-color: var(--bg-card) !important;
-        border: 1px solid var(--border-card) !important;
+        background-color: var(--secondary-background-color) !important;
+        border: 1px solid rgba(128,128,128,0.25) !important;
         border-radius: 12px;
         padding: 16px 20px;
     }
-    [data-testid="stMetricLabel"]  { color: var(--text-muted)   !important; font-size: 0.82rem !important; }
-    [data-testid="stMetricValue"]  { color: var(--text-primary) !important; font-size: 1.8rem !important; font-weight: 700 !important; }
-    [data-testid="stMetricDelta"]  { font-size: 0.80rem !important; }
+    [data-testid="stMetricLabel"] { color: var(--text-color) !important; opacity: 0.7; font-size: 0.82rem !important; }
+    [data-testid="stMetricValue"] { color: var(--text-color) !important; font-size: 1.8rem !important; font-weight: 700 !important; }
+    [data-testid="stMetricDelta"] { font-size: 0.80rem !important; }
 
-    /* Títulos */
-    h1          { color: var(--text-primary) !important; }
-    h2, h3      { color: var(--text-heading) !important; }
-    p, span, li { color: var(--text-primary); }
-
-    /* Sidebar: textos y labels */
-    [data-testid="stSidebar"] label,
-    [data-testid="stSidebar"] p,
-    [data-testid="stSidebar"] span { color: var(--text-muted) !important; }
-
-    /* Divider */
-    hr { border-color: var(--border-card) !important; }
-
-    /* Tab activo */
+    /* Tab activo — usa el color primario del tema */
     [data-baseweb="tab"][aria-selected="true"] {
-        border-bottom: 2px solid var(--accent) !important;
-        color: var(--accent) !important;
-    }
-
-    /* Inputs y selectboxes en sidebar */
-    [data-testid="stSidebar"] [data-baseweb="select"] > div,
-    [data-testid="stSidebar"] input {
-        background-color: var(--bg-card) !important;
-        color: var(--text-primary) !important;
-        border-color: var(--border-card) !important;
+        border-bottom: 2px solid var(--primary-color) !important;
+        color: var(--primary-color) !important;
     }
 </style>
 """, unsafe_allow_html=True)
+
+
+# Variables para Plotly (se calculan una vez; solo afectan los gráficos)
+_theme   = st.get_option("theme.base") or "dark"
+_is_dark = (_theme == "dark")
+
 
 # ─── CONSTANTES ────────────────────────────────────────────────────────────────
 EXCEL_FILE = "visitas_ventas.xlsx"
@@ -170,33 +113,27 @@ def color_plotly(nombre: str) -> str:
     return COLORES_PRINCIPALES.get(nombre, "#4f8ef7")
 
 def get_layout_base() -> dict:
-    """Devuelve colores del layout Plotly según el tema activo de Streamlit."""
-    theme = st.get_option("theme.base") or "dark"
-    is_dark = theme == "dark"
-    bg      = "#1e2535" if is_dark else "#ffffff"
-    font_c  = "#a0b4d0" if is_dark else "#2d3748"
+    """Fondos transparentes: Streamlit aplica su tema via theme='streamlit'."""
     return dict(
-        paper_bgcolor=bg,
-        plot_bgcolor=bg,
-        font=dict(color=font_c, size=12),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         margin=dict(t=30, b=30, l=10, r=10),
-        legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color=font_c)),
     )
 
 LAYOUT_BASE = get_layout_base()
 
 def bar_scale(end_color: str) -> list:
     """Devuelve escala degradada para gráficos de barra, adaptada al tema."""
-    theme = st.get_option("theme.base") or "dark"
-    start = "#b8c8e8" if theme == "light" else "#1e2d4a"
+    start = "#b8c8e8" if not _is_dark else "#1e2d4a"
     return [start, end_color]
+
 
 
 # ─── APP PRINCIPAL ─────────────────────────────────────────────────────────────
 
 # Título
 st.markdown("# 📊 Dashboard de Visitas de Ventas")
-st.markdown("<p style='color:var(--text-muted);margin-top:-12px;'>Seguimiento de actividad de campo — Mantenimiento &amp; Prospección</p>",
+st.markdown(f"<p class='dash-subtitle'>Seguimiento de actividad de campo — Mantenimiento &amp; Prospección</p>",
             unsafe_allow_html=True)
 st.divider()
 
@@ -351,7 +288,7 @@ else:
             connector=dict(line=dict(color="#2e3a55", width=2)),
         ))
         fig_funnel.update_layout(**LAYOUT_BASE, height=380)
-        st.plotly_chart(fig_funnel, use_container_width=True)
+        st.plotly_chart(fig_funnel, use_container_width=True, theme="streamlit")
 
     with col_emb2:
         # Tabla del embudo
@@ -389,7 +326,7 @@ else:
         fig_ciudad.update_layout(**LAYOUT_BASE, height=320,
                                   xaxis_title="", yaxis_title="Nº Visitas",
                                   coloraxis_showscale=False)
-        st.plotly_chart(fig_ciudad, use_container_width=True)
+        st.plotly_chart(fig_ciudad, use_container_width=True, theme="streamlit")
 
     with col_ciu2:
         st.dataframe(
@@ -423,7 +360,7 @@ else:
         )
         fig_giro.update_traces(textinfo="percent+label", textposition="outside")
         fig_giro.update_layout(**LAYOUT_BASE, height=320, showlegend=False)
-        st.plotly_chart(fig_giro, use_container_width=True)
+        st.plotly_chart(fig_giro, use_container_width=True, theme="streamlit")
 
     with col_giro2:
         st.dataframe(
@@ -458,7 +395,7 @@ else:
         fig_freq.update_layout(**LAYOUT_BASE, height=340,
                                 xaxis_title="", yaxis_title="Nº Visitas",
                                 xaxis_tickangle=-35, coloraxis_showscale=False)
-        st.plotly_chart(fig_freq, use_container_width=True)
+        st.plotly_chart(fig_freq, use_container_width=True, theme="streamlit")
 
     with col_frq2:
         st.dataframe(freq, use_container_width=True, hide_index=True)
@@ -515,7 +452,7 @@ else:
     fig_sem.update_layout(**LAYOUT_BASE, height=340,
                            xaxis_title="", yaxis_title="Nº Visitas",
                            coloraxis_showscale=False)
-    st.plotly_chart(fig_sem, use_container_width=True)
+    st.plotly_chart(fig_sem, use_container_width=True, theme="streamlit")
 
 st.divider()
 
@@ -577,7 +514,7 @@ else:
         )
         fig_mix.update_traces(textinfo="percent+label", textposition="outside")
         fig_mix.update_layout(**LAYOUT_BASE, height=360, showlegend=False)
-        st.plotly_chart(fig_mix, use_container_width=True)
+        st.plotly_chart(fig_mix, use_container_width=True, theme="streamlit")
 
     with col_mix2:
         st.dataframe(
@@ -613,7 +550,7 @@ else:
         fig_mciu.update_layout(**LAYOUT_BASE, height=320,
                                 xaxis_title="", yaxis_title="Nº Visitas",
                                 coloraxis_showscale=False)
-        st.plotly_chart(fig_mciu, use_container_width=True)
+        st.plotly_chart(fig_mciu, use_container_width=True, theme="streamlit")
 
     with col_mciu2:
         st.dataframe(
@@ -646,7 +583,7 @@ else:
         )
         fig_mgiro.update_traces(textinfo="percent+label", textposition="outside")
         fig_mgiro.update_layout(**LAYOUT_BASE, height=320, showlegend=False)
-        st.plotly_chart(fig_mgiro, use_container_width=True)
+        st.plotly_chart(fig_mgiro, use_container_width=True, theme="streamlit")
 
     with col_mgiro2:
         st.dataframe(
@@ -681,7 +618,7 @@ else:
         fig_mfreq.update_layout(**LAYOUT_BASE, height=340,
                                  xaxis_title="", yaxis_title="Nº Visitas",
                                  xaxis_tickangle=-35, coloraxis_showscale=False)
-        st.plotly_chart(fig_mfreq, use_container_width=True)
+        st.plotly_chart(fig_mfreq, use_container_width=True, theme="streamlit")
 
     with col_mfrq2:
         st.dataframe(mfreq, use_container_width=True, hide_index=True)
@@ -723,7 +660,7 @@ else:
     fig_sem_m.update_layout(**LAYOUT_BASE, height=340,
                              xaxis_title="", yaxis_title="Nº Visitas",
                              coloraxis_showscale=False)
-    st.plotly_chart(fig_sem_m, use_container_width=True)
+    st.plotly_chart(fig_sem_m, use_container_width=True, theme="streamlit")
 
 st.divider()
 
