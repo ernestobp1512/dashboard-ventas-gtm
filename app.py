@@ -742,12 +742,15 @@ tab1, tab2, tab3 = st.tabs(["📁 Todos los registros", "🔧 Mantenimiento", "�
 cols_mostrar = [COL_VENDEDOR, COL_FECHA, COL_TIPO, COL_CLIENTE,
                 COL_DISTRITO, COL_MOTIVO, COL_RESULTADO]
 
+def prep_detalle(df):
+    """Prepara el df para mostrar: convierte FECHA a solo fecha."""
+    d = df[cols_mostrar].copy()
+    d[COL_FECHA] = d[COL_FECHA].dt.date
+    return d.sort_values(COL_FECHA, ascending=False)
+
 with tab1:
-    st.dataframe(dff[cols_mostrar].sort_values(COL_FECHA, ascending=False),
-                 use_container_width=True, hide_index=True)
+    st.dataframe(prep_detalle(dff), use_container_width=True, hide_index=True)
 with tab2:
-    st.dataframe(df_mant[cols_mostrar].sort_values(COL_FECHA, ascending=False),
-                 use_container_width=True, hide_index=True)
+    st.dataframe(prep_detalle(df_mant), use_container_width=True, hide_index=True)
 with tab3:
-    st.dataframe(df_pros[cols_mostrar].sort_values(COL_FECHA, ascending=False),
-                 use_container_width=True, hide_index=True)
+    st.dataframe(prep_detalle(df_pros), use_container_width=True, hide_index=True)
