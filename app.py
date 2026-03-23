@@ -14,32 +14,86 @@ st.set_page_config(
 # ─── ESTILOS ───────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
+    /* ── Variables de tema oscuro (por defecto) ── */
+    :root {
+        --bg-main:      #0f1117;
+        --bg-sidebar:   #161b27;
+        --bg-card:      #1e2535;
+        --border-card:  #2e3a55;
+        --text-primary: #e8eaf6;
+        --text-muted:   #8fa0c0;
+        --text-heading: #a0b4d0;
+        --accent:       #4f8ef7;
+    }
+
+    /* ── Overrides para tema claro de Streamlit ── */
+    [data-theme="light"],
+    .stApp[data-theme="light"] {
+        --bg-main:      #f5f7fa;
+        --bg-sidebar:   #eef1f6;
+        --bg-card:      #ffffff;
+        --border-card:  #d0d8e8;
+        --text-primary: #1a1f2e;
+        --text-muted:   #4a5568;
+        --text-heading: #2d3748;
+        --accent:       #2563eb;
+    }
+
+    /* Soporte adicional via prefers-color-scheme */
+    @media (prefers-color-scheme: light) {
+        :root {
+            --bg-main:      #f5f7fa;
+            --bg-sidebar:   #eef1f6;
+            --bg-card:      #ffffff;
+            --border-card:  #d0d8e8;
+            --text-primary: #1a1f2e;
+            --text-muted:   #4a5568;
+            --text-heading: #2d3748;
+            --accent:       #2563eb;
+        }
+    }
+
     /* Fondo general */
-    [data-testid="stAppViewContainer"] { background-color: #0f1117; }
-    [data-testid="stSidebar"]          { background-color: #161b27; }
+    [data-testid="stAppViewContainer"] { background-color: var(--bg-main) !important; }
+    [data-testid="stSidebar"]          { background-color: var(--bg-sidebar) !important; }
+    .main .block-container             { background-color: var(--bg-main) !important; }
 
     /* Cards de métricas */
     [data-testid="metric-container"] {
-        background-color: #1e2535;
-        border: 1px solid #2e3a55;
+        background-color: var(--bg-card) !important;
+        border: 1px solid var(--border-card) !important;
         border-radius: 12px;
         padding: 16px 20px;
     }
-    [data-testid="stMetricLabel"]  { color: #8fa0c0 !important; font-size: 0.82rem !important; }
-    [data-testid="stMetricValue"]  { color: #e8eaf6 !important; font-size: 1.8rem !important; font-weight: 700 !important; }
+    [data-testid="stMetricLabel"]  { color: var(--text-muted)   !important; font-size: 0.82rem !important; }
+    [data-testid="stMetricValue"]  { color: var(--text-primary) !important; font-size: 1.8rem !important; font-weight: 700 !important; }
     [data-testid="stMetricDelta"]  { font-size: 0.80rem !important; }
 
-    /* Título principal */
-    h1 { color: #e8eaf6 !important; }
-    h2, h3 { color: #a0b4d0 !important; }
+    /* Títulos */
+    h1          { color: var(--text-primary) !important; }
+    h2, h3      { color: var(--text-heading) !important; }
+    p, span, li { color: var(--text-primary); }
 
-    /* Sidebar labels */
-    .css-1v3fvcr, label { color: #8fa0c0 !important; }
+    /* Sidebar: textos y labels */
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] span { color: var(--text-muted) !important; }
+
+    /* Divider */
+    hr { border-color: var(--border-card) !important; }
 
     /* Tab activo */
     [data-baseweb="tab"][aria-selected="true"] {
-        border-bottom: 2px solid #4f8ef7 !important;
-        color: #4f8ef7 !important;
+        border-bottom: 2px solid var(--accent) !important;
+        color: var(--accent) !important;
+    }
+
+    /* Inputs y selectboxes en sidebar */
+    [data-testid="stSidebar"] [data-baseweb="select"] > div,
+    [data-testid="stSidebar"] input {
+        background-color: var(--bg-card) !important;
+        color: var(--text-primary) !important;
+        border-color: var(--border-card) !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -115,20 +169,34 @@ def cargar_datos(ruta: str) -> pd.DataFrame:
 def color_plotly(nombre: str) -> str:
     return COLORES_PRINCIPALES.get(nombre, "#4f8ef7")
 
-LAYOUT_BASE = dict(
-    paper_bgcolor="#1e2535",
-    plot_bgcolor="#1e2535",
-    font=dict(color="#a0b4d0", size=12),
-    margin=dict(t=30, b=30, l=10, r=10),
-    legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#a0b4d0")),
-)
+def get_layout_base() -> dict:
+    """Devuelve colores del layout Plotly según el tema activo de Streamlit."""
+    theme = st.get_option("theme.base") or "dark"
+    is_dark = theme == "dark"
+    bg      = "#1e2535" if is_dark else "#ffffff"
+    font_c  = "#a0b4d0" if is_dark else "#2d3748"
+    return dict(
+        paper_bgcolor=bg,
+        plot_bgcolor=bg,
+        font=dict(color=font_c, size=12),
+        margin=dict(t=30, b=30, l=10, r=10),
+        legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color=font_c)),
+    )
+
+LAYOUT_BASE = get_layout_base()
+
+def bar_scale(end_color: str) -> list:
+    """Devuelve escala degradada para gráficos de barra, adaptada al tema."""
+    theme = st.get_option("theme.base") or "dark"
+    start = "#b8c8e8" if theme == "light" else "#1e2d4a"
+    return [start, end_color]
 
 
 # ─── APP PRINCIPAL ─────────────────────────────────────────────────────────────
 
 # Título
 st.markdown("# 📊 Dashboard de Visitas de Ventas")
-st.markdown("<p style='color:#8fa0c0;margin-top:-12px;'>Seguimiento de actividad de campo — Mantenimiento & Prospección</p>",
+st.markdown("<p style='color:var(--text-muted);margin-top:-12px;'>Seguimiento de actividad de campo — Mantenimiento &amp; Prospección</p>",
             unsafe_allow_html=True)
 st.divider()
 
@@ -314,7 +382,7 @@ else:
             ciudad_counts,
             x=COL_DISTRITO, y="Visitas",
             color="Visitas",
-            color_continuous_scale=["#1e2d4a", "#4f8ef7"],
+            color_continuous_scale=bar_scale("#4f8ef7"),
             text="Visitas",
         )
         fig_ciudad.update_traces(textposition="outside")
@@ -383,7 +451,7 @@ else:
             freq,
             x=COL_CLIENTE, y="Nº Visitas",
             color="Nº Visitas",
-            color_continuous_scale=["#1e2d4a", "#1fc98e"],
+            color_continuous_scale=bar_scale("#1fc98e"),
             text="Nº Visitas",
         )
         fig_freq.update_traces(textposition="outside")
@@ -440,7 +508,7 @@ else:
         sem_pros,
         x="Semana", y="Visitas",
         color="Visitas",
-        color_continuous_scale=["#1e2d4a", "#9b74f7"],
+        color_continuous_scale=bar_scale("#9b74f7"),
         text="Visitas",
     )
     fig_sem.update_traces(textposition="outside")
@@ -538,7 +606,7 @@ else:
             mciu_counts,
             x=COL_DISTRITO, y="Visitas",
             color="Visitas",
-            color_continuous_scale=["#1e2d4a", "#4f8ef7"],
+            color_continuous_scale=bar_scale("#4f8ef7"),
             text="Visitas",
         )
         fig_mciu.update_traces(textposition="outside")
@@ -606,7 +674,7 @@ else:
             mfreq,
             x=COL_CLIENTE, y="Nº Visitas",
             color="Nº Visitas",
-            color_continuous_scale=["#1e2d4a", "#f7954f"],
+            color_continuous_scale=bar_scale("#f7954f"),
             text="Nº Visitas",
         )
         fig_mfreq.update_traces(textposition="outside")
@@ -648,7 +716,7 @@ else:
         sem_mant_df,
         x="Semana", y="Visitas",
         color="Visitas",
-        color_continuous_scale=["#1e2d4a", "#f7d14f"],
+        color_continuous_scale=bar_scale("#f7d14f"),
         text="Visitas",
     )
     fig_sem_m.update_traces(textposition="outside")
