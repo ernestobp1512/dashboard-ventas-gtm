@@ -1,0 +1,92 @@
+# ==========================
+# Python
+# ==========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# ==========================
+# Entornos virtuales
+# ==========================
+.venv/
+venv/
+env/
+ENV/
+.env
+
+# ==========================
+# Variables de entorno / secretos
+# ==========================
+.env
+.env.local
+*.env
+
+# ==========================
+# Archivos de datos sensibles
+# ==========================
+*.xlsx
+*.xls
+*.csv
+data/
+
+# ==========================
+# Jupyter Notebooks
+# ==========================
+.ipynb_checkpoints/
+*.ipynb
+
+# ==========================
+# IDEs y editores
+# ==========================
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# ==========================
+# Agentes de IA y extensiones
+# ==========================
+.qodo/
+.gemini/
+.cursor/
+.cursorignore
+.copilot/
+.github/copilot*
+.codeium/
+.tabnine/
+.continue/
+.aider*
+.agent/
+.agents/
+_agent/
+_agents/
+.antigravity/
+
+# ==========================
+# Sistema operativo
+# ==========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ==========================
+# Logs y cachés
+# ==========================
+*.log
+*.cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ==========================
+# Distribución / empaquetado
+# ==========================
+MANIFEST
+pip-wheel-metadata/
