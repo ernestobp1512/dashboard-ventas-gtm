@@ -88,7 +88,7 @@ PALETA_EMBUDO = [
 # ─── CARGA DE DATOS ────────────────────────────────────────────────────────────
 @st.cache_data(ttl=300)
 def cargar_datos(ruta: str) -> pd.DataFrame:
-    df = pd.read_excel(ruta, sheet_name=0, engine="openpyxl")
+    df = pd.read_excel(ruta, sheet_name="DATA", engine="openpyxl")
 
     # Normalizar texto para evitar problemas de espacios / mayúsculas
     for col in [COL_VENDEDOR, COL_TIPO, COL_TIPO_CLI, COL_CLIENTE,
@@ -143,7 +143,7 @@ with st.sidebar:
     st.markdown("### ⚙️ Configuración")
     archivo = st.file_uploader(
         "Cargar Excel de visitas",
-        type=["xlsx", "xls"],
+        type=["xlsx", "xls", "xlsm"],
         help="Sube tu archivo con las columnas estándar del registro de visitas."
     )
 
