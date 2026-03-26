@@ -128,6 +128,18 @@ def bar_scale(end_color: str) -> list:
     start = "#b8c8e8" if not _is_dark else "#1e2d4a"
     return [start, end_color]
 
+def etiqueta_semana(sem_lbl: str, fecha_ini_filtro, fecha_fin_filtro) -> str:
+    """Devuelve 'Semana N (DD/MM/YY-DD/MM/YY)' con inicio=lunes, fin=domingo,
+       recortado por las fechas del filtro activo."""
+    # sem_lbl tiene formato YYYY-SWW
+    anio, sw = sem_lbl.split("-S")
+    # Primer día (lunes) de la ISO-week
+    lunes = pd.Timestamp.fromisocalendar(int(anio), int(sw), 1)
+    domingo = lunes + pd.Timedelta(days=6)
+    # Recortar por el rango del filtro
+    inicio = max(lunes, pd.Timestamp(fecha_ini_filtro))
+    fin    = min(domingo, pd.Timestamp(fecha_fin_filtro))
+    return f"{inicio.strftime('%d/%m/%y')}-{fin.strftime('%d/%m/%y')}"
 
 
 # ─── APP PRINCIPAL ─────────────────────────────────────────────────────────────
@@ -481,20 +493,6 @@ with tab_pros:
         # ── Indicador 7: Visitas por Semana ───────────────────────────────────────
         st.markdown("### 📅 Visitas por Semana")
         st.caption("Semanas en orden relativo al rango de fechas. Los extremos se recortan según las fechas del filtro.")
-
-        # Construir etiquetas de semana con rango de fechas (lunes–domingo, recortado por el filtro)
-        def etiqueta_semana(sem_lbl: str, fecha_ini_filtro, fecha_fin_filtro) -> str:
-            """Devuelve 'Semana N (DD/MM/YY-DD/MM/YY)' con inicio=lunes, fin=domingo,
-               recortado por las fechas del filtro activo."""
-            # sem_lbl tiene formato YYYY-SWW
-            anio, sw = sem_lbl.split("-S")
-            # Primer día (lunes) de la ISO-week
-            lunes = pd.Timestamp.fromisocalendar(int(anio), int(sw), 1)
-            domingo = lunes + pd.Timedelta(days=6)
-            # Recortar por el rango del filtro
-            inicio = max(lunes, pd.Timestamp(fecha_ini_filtro))
-            fin    = min(domingo, pd.Timestamp(fecha_fin_filtro))
-            return f"{inicio.strftime('%d/%m/%y')}-{fin.strftime('%d/%m/%y')}"
 
         # Obtener fechas del filtro activo (o rango global si no se aplicó)
         if isinstance(sel_rango, (list, tuple)) and len(sel_rango) == 2:
