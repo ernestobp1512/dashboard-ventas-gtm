@@ -303,27 +303,30 @@ with tab_pros:
                 rank_pros
                 .merge(cierres_vend, on=COL_VENDEDOR, how="left")
                 .fillna({"Cierres": 0})
-                .sort_values("Prospectos Únicos", ascending=False)
             )
             ranking_df["Cierres"] = ranking_df["Cierres"].astype(int)
+            ranking_df["Tasa Cierre Num"] = (
+                ranking_df["Cierres"] / ranking_df["Prospectos Únicos"] * 100
+            ).fillna(0).round(1)
+            ranking_df = ranking_df.sort_values("Tasa Cierre Num", ascending=False)
 
             col_rank1, col_rank2 = st.columns([3, 2])
             with col_rank1:
                 fig_rank = go.Figure()
                 fig_rank.add_trace(go.Bar(
                     x=ranking_df[COL_VENDEDOR],
-                    y=ranking_df["Prospectos Únicos"],
-                    name="Prospectos Únicos",
-                    marker_color=COLORES_PRINCIPALES["azul"],
-                    text=ranking_df["Prospectos Únicos"],
-                    textposition="outside", cliponaxis=False,
-                ))
-                fig_rank.add_trace(go.Bar(
-                    x=ranking_df[COL_VENDEDOR],
                     y=ranking_df["Cierres"],
                     name="Cierres",
                     marker_color=COLORES_PRINCIPALES["verde"],
                     text=ranking_df["Cierres"],
+                    textposition="outside", cliponaxis=False,
+                ))
+                fig_rank.add_trace(go.Bar(
+                    x=ranking_df[COL_VENDEDOR],
+                    y=ranking_df["Prospectos Únicos"],
+                    name="Prospectos Únicos",
+                    marker_color=COLORES_PRINCIPALES["azul"],
+                    text=ranking_df["Prospectos Únicos"],
                     textposition="outside", cliponaxis=False,
                 ))
                 fig_rank.update_layout(
@@ -337,10 +340,9 @@ with tab_pros:
                 st.plotly_chart(fig_rank, use_container_width=True, theme="streamlit")
 
             with col_rank2:
-                tabla_rank = ranking_df[[COL_VENDEDOR, "Prospectos Únicos", "Cierres"]].copy()
-                tabla_rank["Tasa Cierre"] = (
-                    tabla_rank["Cierres"] / tabla_rank["Prospectos Únicos"] * 100
-                ).round(1).astype(str) + "%"
+                tabla_rank = ranking_df[[COL_VENDEDOR, "Cierres", "Prospectos Únicos", "Tasa Cierre Num"]].copy()
+                tabla_rank.rename(columns={"Tasa Cierre Num": "Tasa Cierre"}, inplace=True)
+                tabla_rank["Tasa Cierre"] = tabla_rank["Tasa Cierre"].astype(str) + "%"
                 st.dataframe(tabla_rank, use_container_width=True, hide_index=True)
 
         st.divider()
@@ -579,28 +581,31 @@ with tab_mant:
                 rank_mant
                 .merge(pedidos_vend, on=COL_VENDEDOR, how="left")
                 .fillna({"Con Pedido": 0})
-                .sort_values("Total Visitas", ascending=False)
             )
             ranking_m_df["Con Pedido"] = ranking_m_df["Con Pedido"].astype(int)
+            ranking_m_df["Tasa Conv Num"] = (
+                ranking_m_df["Con Pedido"] / ranking_m_df["Total Visitas"] * 100
+            ).fillna(0).round(1)
+            ranking_m_df = ranking_m_df.sort_values("Tasa Conv Num", ascending=False)
 
             col_mrank1, col_mrank2 = st.columns([3, 2])
             with col_mrank1:
                 fig_mrank = go.Figure()
                 fig_mrank.add_trace(go.Bar(
                     x=ranking_m_df[COL_VENDEDOR],
-                    y=ranking_m_df["Total Visitas"],
-                    name="Total Visitas",
-                    marker_color=COLORES_PRINCIPALES["azul"],
-                    text=ranking_m_df["Total Visitas"],
+                    y=ranking_m_df["Con Pedido"],
+                    name="Con Pedido",
+                    marker_color=COLORES_PRINCIPALES["amarillo"],
+                    text=ranking_m_df["Con Pedido"],
                     textposition="outside",
                     cliponaxis=False,
                 ))
                 fig_mrank.add_trace(go.Bar(
                     x=ranking_m_df[COL_VENDEDOR],
-                    y=ranking_m_df["Con Pedido"],
-                    name="Con Pedido",
-                    marker_color=COLORES_PRINCIPALES["amarillo"],
-                    text=ranking_m_df["Con Pedido"],
+                    y=ranking_m_df["Total Visitas"],
+                    name="Total Visitas",
+                    marker_color=COLORES_PRINCIPALES["azul"],
+                    text=ranking_m_df["Total Visitas"],
                     textposition="outside",
                     cliponaxis=False,
                 ))
@@ -615,10 +620,9 @@ with tab_mant:
                 st.plotly_chart(fig_mrank, use_container_width=True, theme="streamlit")
 
             with col_mrank2:
-                tabla_mrank = ranking_m_df[[COL_VENDEDOR, "Total Visitas", "Con Pedido"]].copy()
-                tabla_mrank["Tasa Conv."] = (
-                    tabla_mrank["Con Pedido"] / tabla_mrank["Total Visitas"] * 100
-                ).round(1).astype(str) + "%"
+                tabla_mrank = ranking_m_df[[COL_VENDEDOR, "Con Pedido", "Total Visitas", "Tasa Conv Num"]].copy()
+                tabla_mrank.rename(columns={"Tasa Conv Num": "Tasa Conv."}, inplace=True)
+                tabla_mrank["Tasa Conv."] = tabla_mrank["Tasa Conv."].astype(str) + "%"
                 st.dataframe(tabla_mrank, use_container_width=True, hide_index=True)
 
         st.divider()
