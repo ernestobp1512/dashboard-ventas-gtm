@@ -880,8 +880,11 @@ with st.sidebar:
                             paper_bgcolor=bg_color_fig, 
                             plot_bgcolor=bg_color_fig,
                             font=dict(color=font_color_fig),
-                            margin=dict(t=40, b=40, l=40, r=40)
+                            margin=dict(t=60, b=130, l=40, r=40)
                         )
+                        # Forzar que los ejes no recorten largos textos si crecen
+                        fig.update_xaxes(automargin=True)
+                        fig.update_yaxes(automargin=True)
                         fig.write_image(img_bytes, format="png", width=1200, height=600, scale=2)
                         img_bytes.seek(0)
                         
