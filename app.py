@@ -900,10 +900,25 @@ with st.sidebar:
                     st.error(f"Error al generar la presentación: {e}")
 
     if "pptx_data" in st.session_state:
+        # Generar nombre del archivo basado en los filtros
+        if isinstance(sel_rango, (list, tuple)):
+            if len(sel_rango) == 2:
+                f_ini_str = sel_rango[0].strftime("%d.%m.%Y")
+                f_fin_str = sel_rango[1].strftime("%d.%m.%Y")
+                fecha_lbl = f_ini_str if f_ini_str == f_fin_str else f"{f_ini_str}-{f_fin_str}"
+            elif len(sel_rango) == 1:
+                fecha_lbl = sel_rango[0].strftime("%d.%m.%Y")
+            else:
+                fecha_lbl = ""
+        else:
+            fecha_lbl = sel_rango.strftime("%d.%m.%Y") if hasattr(sel_rango, 'strftime') else ""
+            
+        nombre_str = f"{sel_vendedor} {fecha_lbl}".strip() + ".pptx"
+
         st.download_button(
             label="Descargar Presentación",
             data=st.session_state["pptx_data"],
-            file_name="Dashboard_Ventas.pptx",
+            file_name=nombre_str,
             mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
             use_container_width=True,
             type="primary"
