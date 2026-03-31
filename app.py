@@ -3,7 +3,10 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from pathlib import Path
-
+import io
+from pptx import Presentation
+from pptx.util import Inches, Pt
+from pptx.dml.color import RGBColor
 # ─── CONFIGURACIÓN ─────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Dashboard de Visitas de Ventas",
@@ -163,9 +166,6 @@ with st.sidebar:
     if archivo is not None:
         ruta_usar = archivo
         fuente_label = f"📂 {archivo.name}"
-    elif ruta_default.exists():
-        ruta_usar = str(ruta_default)
-        fuente_label = f"📄 {EXCEL_FILE} (local)"
     else:
         st.warning("⚠️ Sube un archivo Excel para comenzar.")
         st.stop()
@@ -228,6 +228,7 @@ df_mant = dff[dff["_esMant"]].copy()
 df_pros = dff[~dff["_esMant"]].copy()
 
 # ══════════════════════════════════════════════════════════════════════════════
+graficos_exportar = []
 
 # ══════════════════════════════════════════════════════════════════════════════
 # SECCIONES PRINCIPALES EN PESTAÑAS
@@ -242,6 +243,7 @@ with tab_pros:
     if df_pros.empty:
         st.info("No hay datos de Prospección para los filtros actuales.")
     else:
+        graficos_exportar.append(("SECCIÓN", "Prospección"))
 
         # ── Cálculos base ─────────────────────────────────────────────────────────
         # Total de prospectos únicos visitados en el rango
@@ -350,6 +352,7 @@ with tab_pros:
                     legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1),
                 )
                 st.plotly_chart(fig_rank, use_container_width=True, theme="streamlit")
+                graficos_exportar.append(("Prospección - Ranking por Vendedor", fig_rank))
 
             with col_rank2:
                 tabla_rank = ranking_df[[COL_VENDEDOR, "Cierres", "Prospectos Únicos", "Tasa Cierre Num"]].copy()
@@ -377,6 +380,7 @@ with tab_pros:
             ))
             fig_funnel.update_layout(**LAYOUT_BASE, height=380)
             st.plotly_chart(fig_funnel, use_container_width=True, theme="streamlit")
+            graficos_exportar.append(("Prospección - Embudo de Prospección", fig_funnel))
 
         with col_emb2:
             # Tabla del embudo
@@ -415,6 +419,7 @@ with tab_pros:
                                       xaxis_title="", yaxis_title="Nº Visitas",
                                       coloraxis_showscale=False)
             st.plotly_chart(fig_ciudad, use_container_width=True, theme="streamlit")
+            graficos_exportar.append(("Prospección - Actividad por Ciudad", fig_ciudad))
 
         with col_ciu2:
             st.dataframe(
@@ -449,6 +454,7 @@ with tab_pros:
             fig_giro.update_traces(textinfo="percent+label", textposition="outside")
             fig_giro.update_layout(**LAYOUT_BASE, height=320, showlegend=False)
             st.plotly_chart(fig_giro, use_container_width=True, theme="streamlit")
+            graficos_exportar.append(("Prospección - Actividad por Giro", fig_giro))
 
         with col_giro2:
             st.dataframe(
@@ -484,6 +490,7 @@ with tab_pros:
                                     xaxis_title="", yaxis_title="Nº Visitas",
                                     xaxis_tickangle=-35, coloraxis_showscale=False)
             st.plotly_chart(fig_freq, use_container_width=True, theme="streamlit")
+            graficos_exportar.append(("Prospección - Frecuencia de Visitas por Prospecto", fig_freq))
 
         with col_frq2:
             st.dataframe(freq, use_container_width=True, hide_index=True)
@@ -527,6 +534,7 @@ with tab_pros:
                                xaxis_title="", yaxis_title="Nº Visitas",
                                coloraxis_showscale=False)
         st.plotly_chart(fig_sem, use_container_width=True, theme="streamlit")
+        graficos_exportar.append(("Prospección - Visitas por Semana", fig_sem))
 
     st.divider()
 
@@ -540,6 +548,7 @@ with tab_mant:
     if df_mant.empty:
         st.info("No hay datos de Mantenimiento para los filtros actuales.")
     else:
+        graficos_exportar.append(("SECCIÓN", "Mantenimiento"))
 
         # ── Cálculos base ────────────────────────────────────────────────────
         total_vis_mant   = len(df_mant)
@@ -616,6 +625,7 @@ with tab_mant:
                     legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1),
                 )
                 st.plotly_chart(fig_mrank, use_container_width=True, theme="streamlit")
+                graficos_exportar.append(("Mantenimiento - Ranking", fig_mrank))
 
             with col_mrank2:
                 tabla_mrank = ranking_m_df[[COL_VENDEDOR, "Con Pedido", "Total Visitas", "Tasa Conv Num"]].copy()
@@ -650,6 +660,7 @@ with tab_mant:
             fig_mix.update_traces(textinfo="percent+label", textposition="outside")
             fig_mix.update_layout(**LAYOUT_BASE, height=360, showlegend=False)
             st.plotly_chart(fig_mix, use_container_width=True, theme="streamlit")
+            graficos_exportar.append(("Mantenimiento - Mix de Mantenimiento", fig_mix))
 
         with col_mix2:
             st.dataframe(
@@ -686,6 +697,7 @@ with tab_mant:
                                     xaxis_title="", yaxis_title="Nº Visitas",
                                     coloraxis_showscale=False)
             st.plotly_chart(fig_mciu, use_container_width=True, theme="streamlit")
+            graficos_exportar.append(("Mantenimiento - Actividad por Ciudad", fig_mciu))
 
         with col_mciu2:
             st.dataframe(
@@ -719,6 +731,7 @@ with tab_mant:
             fig_mgiro.update_traces(textinfo="percent+label", textposition="outside")
             fig_mgiro.update_layout(**LAYOUT_BASE, height=320, showlegend=False)
             st.plotly_chart(fig_mgiro, use_container_width=True, theme="streamlit")
+            graficos_exportar.append(("Mantenimiento - Actividad por Giro", fig_mgiro))
 
         with col_mgiro2:
             st.dataframe(
@@ -754,6 +767,7 @@ with tab_mant:
                                      xaxis_title="", yaxis_title="Nº Visitas",
                                      xaxis_tickangle=-35, coloraxis_showscale=False)
             st.plotly_chart(fig_mfreq, use_container_width=True, theme="streamlit")
+            graficos_exportar.append(("Mantenimiento - Frecuencia de Visitas por Cliente", fig_mfreq))
 
         with col_mfrq2:
             st.dataframe(mfreq, use_container_width=True, hide_index=True)
@@ -796,10 +810,104 @@ with tab_mant:
                                  xaxis_title="", yaxis_title="Nº Visitas",
                                  coloraxis_showscale=False)
         st.plotly_chart(fig_sem_m, use_container_width=True, theme="streamlit")
+        graficos_exportar.append(("Mantenimiento - Visitas por Semana", fig_sem_m))
 
     st.divider()
 
-    # ══════════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ─── LÓGICA DE EXPORTACIÓN PPTX (SIDEBAR) ──────────────────────────────────────
+with st.sidebar:
+    st.divider()
+    st.markdown("### 📥 Exportar")
+    tema_export = st.radio("Tema de la presentación:", ["Oscuro", "Claro"], horizontal=True)
+    export_dark = (tema_export == "Oscuro")
+    
+    if st.button("Generar Presentación (PPTX)", use_container_width=True):
+        if not graficos_exportar:
+            st.warning("No hay gráficos para exportar.")
+        else:
+            with st.spinner("Generando diapositivas... (puede tardar unos segundos)"):
+                try:
+                    prs = Presentation()
+                    # Definir tamaño ancho por defecto
+                    prs.slide_width = Inches(13.33)
+                    prs.slide_height = Inches(7.5)
+                    
+                    # Layout en blanco
+                    blank_slide_layout = prs.slide_layouts[6] 
+                    
+                    for titulo, fig in graficos_exportar:
+                        if titulo == "SECCIÓN":
+                            # Diapositiva de separador
+                            slide = prs.slides.add_slide(blank_slide_layout)
+                            if export_dark:
+                                slide.background.fill.solid()
+                                slide.background.fill.fore_color.rgb = RGBColor(14, 17, 23)
+                                
+                            txBox = slide.shapes.add_textbox(Inches(1), Inches(3), Inches(11.33), Inches(2))
+                            tf = txBox.text_frame
+                            p = tf.add_paragraph()
+                            p.text = fig
+                            p.font.size = Pt(64)
+                            p.font.bold = True
+                            if export_dark:
+                                p.font.color.rgb = RGBColor(250, 250, 250)
+                            continue
+
+                        slide = prs.slides.add_slide(blank_slide_layout)
+                        if export_dark:
+                            slide.background.fill.solid()
+                            slide.background.fill.fore_color.rgb = RGBColor(14, 17, 23)
+                        
+                        # Añadir título
+                        txBox = slide.shapes.add_textbox(Inches(0.5), Inches(0.2), Inches(12.33), Inches(0.8))
+                        tf = txBox.text_frame
+                        p = tf.add_paragraph()
+                        p.text = titulo
+                        p.font.size = Pt(28)
+                        p.font.bold = True
+                        if export_dark:
+                            p.font.color.rgb = RGBColor(250, 250, 250)
+                        
+                        # Exportar imagen
+                        img_bytes = io.BytesIO()
+                        # Modificamos temporalmente el tamaño y márgenes para exportar
+                        bg_color_fig = "#0e1117" if export_dark else "white"
+                        font_color_fig = "white" if export_dark else "black"
+                        
+                        fig.update_layout(
+                            paper_bgcolor=bg_color_fig, 
+                            plot_bgcolor=bg_color_fig,
+                            font=dict(color=font_color_fig),
+                            margin=dict(t=40, b=40, l=40, r=40)
+                        )
+                        fig.write_image(img_bytes, format="png", width=1200, height=600, scale=2)
+                        img_bytes.seek(0)
+                        
+                        # Añadir imagen a la diapositiva
+                        slide.shapes.add_picture(img_bytes, Inches(1), Inches(1.2), width=Inches(11.33))
+                    
+                    # Guardar PPTX en memoria
+                    pptx_out = io.BytesIO()
+                    prs.save(pptx_out)
+                    pptx_out.seek(0)
+                    
+                    st.session_state["pptx_data"] = pptx_out.getvalue()
+                    st.success("¡Presentación lista!")
+                    
+                except Exception as e:
+                    st.error(f"Error al generar la presentación: {e}")
+
+    if "pptx_data" in st.session_state:
+        st.download_button(
+            label="Descargar Presentación",
+            data=st.session_state["pptx_data"],
+            file_name="Dashboard_Ventas.pptx",
+            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            use_container_width=True,
+            type="primary"
+        )
 
 
 # SECCIÓN 5 — TABLA DE DETALLE
