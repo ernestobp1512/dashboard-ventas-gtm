@@ -7,62 +7,112 @@ import io
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
+
 # ─── CONFIGURACIÓN ─────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Dashboard de Visitas de Ventas",
+    page_title="Reporte de Visitas Comerciales",
     page_icon="📊",
     layout="wide",
 )
 
 # ─── ESTILOS ───────────────────────────────────────────────────────────────────
-# Variables CSS nativas de Streamlit (--text-color, --secondary-background-color, etc.)
-# se actualizan automáticamente con el tema seleccionado por el usuario.
 st.markdown("""
 <style>
-    /* Cards de métricas — usa variables CSS de Streamlit */
-    [data-testid="metric-container"] {
-        background-color: var(--secondary-background-color) !important;
-        border: 1px solid rgba(128,128,128,0.25) !important;
-        border-radius: 12px;
-        padding: 16px 20px;
+    /* Estilos para las tarjetas del KPI de la imagen */
+    .kpi-container {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        margin-top: 10px;
+        margin-bottom: 25px;
+        padding: 0 5%;
     }
-    [data-testid="stMetricLabel"] { color: var(--text-color) !important; opacity: 0.7; font-size: 0.82rem !important; }
-    [data-testid="stMetricValue"] { color: var(--text-color) !important; font-size: 1.8rem !important; font-weight: 700 !important; }
-    [data-testid="stMetricDelta"] { font-size: 0.80rem !important; }
+    .kpi-card {
+        flex: 1;
+        background-color: var(--secondary-background-color) !important;
+        border-radius: 8px;
+        padding: 24px 10px;
+        border-left: 4px solid #1c64f2; 
+        text-align: center;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        color: var(--text-color) !important;
+    }
+    .kpi-card:nth-child(2) { border-left-color: #3b82f6; }
+    .kpi-card:nth-child(3) { border-left-color: #60a5fa; }
+    .kpi-card:nth-child(4) { border-left-color: #2563eb; }
 
-    /* Tab activo — usa el color primario del tema */
+    .kpi-value {
+        font-size: 28px;
+        font-weight: 800;
+        margin-bottom: 8px;
+        color: #1e3a8a;
+    }
+    .kpi-label {
+        font-size: 13px;
+        opacity: 0.7;
+    }
+    
+    /* Tab activo */
     [data-baseweb="tab"][aria-selected="true"] {
         border-bottom: 2px solid var(--primary-color) !important;
         color: var(--primary-color) !important;
     }
+    
+    /* Titulo top */
+    .header-title-container {
+        text-align: center;
+        margin-top: 10px;
+        margin-bottom: 15px;
+    }
+    .header-title {
+        color: #1e3a8a;
+        font-size: 38px;
+        font-weight: 800;
+        margin-bottom: 5px;
+        display: inline-flex;
+        align-items: center;
+        gap: 15px;
+    }
+    .header-subtitle {
+        color: #6b7280;
+        font-size: 16px;
+    }
+    
 </style>
 """, unsafe_allow_html=True)
 
-
-# Variables para Plotly (se calculan una vez; solo afectan los gráficos)
 _theme   = st.get_option("theme.base") or "dark"
 _is_dark = (_theme == "dark")
+
+if _is_dark:
+    st.markdown("""
+    <style>
+        .header-title { color: #60a5fa !important; }
+        .header-subtitle { color: #9ca3af !important; }
+        .kpi-value { color: #bfc1c6; }
+    </style>
+    """, unsafe_allow_html=True)
 
 
 # ─── CONSTANTES ────────────────────────────────────────────────────────────────
 EXCEL_FILE = "visitas_ventas.xlsx"
 
-COL_VENDEDOR = "VENDEDOR"
-COL_FECHA    = "FECHA"
-COL_TIPO     = "TIPO DE VISITA"
-COL_TIPO_CLI = "TIPO DE CLIENTE"
-COL_CLIENTE  = "RAZON SOCIAL CLIENTE"
-COL_DISTRITO = "DISTRITO"
-COL_CONTACTO = "CONTACTO"
-COL_TELEFONO = "TELÉFONO"
-COL_MOTIVO   = "MOTIVO VISITA"
-COL_MOT_NRO  = "MOTIVO NRO"
-COL_RESULTADO= "RESULTADO / OBS"
+COL_FECHA    = "Date"
+COL_TIPO     = "Tipo" # PROSPECCIÓN o MANTENIMIENTO
+COL_TIPO_CLI = "Giro"
+COL_CLIENTE  = "Cliente o Prospecto"
+COL_DISTRITO = "Distrito"
+COL_MOTIVO   = "Task"
+COL_RESULTADO= "Obs"
 
-VAL_MANT = "MANTENIMIENTO"
-VAL_PROS = "PROSPECCIÓN"
+# Variables nuevas o cruzadas
+COL_ZONA     = "Zona"
+COL_REGION   = "Región"
+COL_DEPARTA  = "Departamento"
+COL_PROVINCIA= "Provincia"
+COL_TIPO_VIS = "Tipo Visita" # FÍSICA o VIRTUAL
+COL_VENDEDOR = "Vendedor"
 
-# Etapas del embudo de prospección en orden
 ETAPAS_EMBUDO = [
     "PROSPECCIÓN",
     "CALIFICACIÓN DE LEADS",
@@ -74,49 +124,54 @@ ETAPAS_EMBUDO = [
 ]
 
 COLORES_PRINCIPALES = {
-    "azul":    "#4f8ef7",
-    "verde":   "#1fc98e",
-    "naranja": "#f7954f",
-    "rojo":    "#f75f4f",
-    "morado":  "#9b74f7",
-    "amarillo":"#f7d14f",
+    "azul":    "#4f8ef7", "verde":   "#1fc98e", "naranja": "#f7954f",
+    "rojo":    "#f75f4f", "morado":  "#9b74f7", "amarillo":"#f7d14f",
     "cyan":    "#4ff0f7",
 }
 
-PALETA_EMBUDO = [
-    "#4f8ef7", "#1fc98e", "#f7d14f",
-    "#f7954f", "#9b74f7", "#f75f4f", "#8fa0c0",
-]
-
 # ─── CARGA DE DATOS ────────────────────────────────────────────────────────────
 @st.cache_data(ttl=300)
-def cargar_datos(ruta: str) -> pd.DataFrame:
-    df = pd.read_excel(ruta, sheet_name="DATA", engine="openpyxl")
+def cargar_datos(ruta) -> pd.DataFrame:
+    df_log = pd.read_excel(ruta, sheet_name="Log", engine="openpyxl")
+    df_users = pd.read_excel(ruta, sheet_name="Users", engine="openpyxl")
+    df_zona = pd.read_excel(ruta, sheet_name="Zona", engine="openpyxl")
+    
+    # Limpiar columnas de posibles espacios
+    df_log.columns = df_log.columns.str.strip()
+    df_users.columns = df_users.columns.str.strip()
+    df_zona.columns = df_zona.columns.str.strip()
 
-    # Normalizar texto para evitar problemas de espacios / mayúsculas
-    for col in [COL_VENDEDOR, COL_TIPO, COL_TIPO_CLI, COL_CLIENTE,
-                COL_DISTRITO, COL_MOTIVO]:
-        if col in df.columns:
-            df[col] = df[col].astype(str).str.strip()
+    # Cruces (Name extraído de Users; Región extraída de Zona)
+    if 'User' in df_log.columns and 'Email' in df_users.columns:
+        df_log = df_log.merge(df_users[['Email', 'Name']], left_on='User', right_on='Email', how='left')
+        df_log[COL_VENDEDOR] = df_log['Name'].fillna("Desconocido")
+    else:
+        df_log[COL_VENDEDOR] = "Desconocido"
 
-    df[COL_FECHA] = pd.to_datetime(df[COL_FECHA], dayfirst=True, errors="coerce")
-    df = df.dropna(subset=[COL_FECHA])
+    if 'Zona' in df_log.columns and 'Zona' in df_zona.columns:
+        df_log = df_log.merge(df_zona[['Zona', 'Tipo Zona']], on='Zona', how='left')
+        df_log[COL_REGION] = df_log['Tipo Zona'].fillna("Desconocido")
+    else:
+        df_log[COL_REGION] = "Desconocido"
 
-    # Columnas derivadas útiles
-    df["_semana"]  = df[COL_FECHA].dt.isocalendar().week.astype(str).str.zfill(2)
-    df["_anio"]    = df[COL_FECHA].dt.year.astype(str)
-    df["_sem_lbl"] = df["_anio"] + "-S" + df["_semana"]
-    df["_esMant"]  = df[COL_TIPO].str.upper() == VAL_MANT.upper()
+    df_log[COL_FECHA] = pd.to_datetime(df_log[COL_FECHA], dayfirst=True, errors="coerce")
+    df_log = df_log.dropna(subset=[COL_FECHA])
 
-    return df
+    # Variables de rango
+    df_log["_semana_nro"] = df_log[COL_FECHA].dt.isocalendar().week.astype(str).str.zfill(2)
+    df_log["_anio_semana"] = df_log[COL_FECHA].dt.isocalendar().year.astype(str)
+    df_log["_sem_lbl"] = df_log["_anio_semana"] + "-S" + df_log["_semana_nro"]
+    
+    df_log["_mes_lbl"] = df_log[COL_FECHA].dt.strftime("%Y-%m")
 
+    # Normalizar texto (eliminar espacios iniciales/finales extras)
+    for col in [COL_VENDEDOR, COL_TIPO, COL_TIPO_CLI, COL_CLIENTE, COL_DISTRITO, COL_MOTIVO, COL_TIPO_VIS, COL_REGION]:
+        if col in df_log.columns:
+            df_log[col] = df_log[col].astype(str).str.strip()
 
-# ─── HELPERS ───────────────────────────────────────────────────────────────────
-def color_plotly(nombre: str) -> str:
-    return COLORES_PRINCIPALES.get(nombre, "#4f8ef7")
+    return df_log
 
 def get_layout_base() -> dict:
-    """Fondos transparentes: Streamlit aplica su tema via theme='streamlit'."""
     return dict(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
@@ -126,54 +181,19 @@ def get_layout_base() -> dict:
 
 LAYOUT_BASE = get_layout_base()
 
-def bar_scale(end_color: str) -> list:
-    """Devuelve escala degradada para gráficos de barra, adaptada al tema."""
-    start = "#b8c8e8" if not _is_dark else "#1e2d4a"
-    return [start, end_color]
-
-def etiqueta_semana(sem_lbl: str, fecha_ini_filtro, fecha_fin_filtro) -> str:
-    """Devuelve 'Semana N (DD/MM/YY-DD/MM/YY)' con inicio=lunes, fin=domingo,
-       recortado por las fechas del filtro activo."""
-    # sem_lbl tiene formato YYYY-SWW
-    anio, sw = sem_lbl.split("-S")
-    # Primer día (lunes) de la ISO-week
-    lunes = pd.Timestamp.fromisocalendar(int(anio), int(sw), 1)
-    domingo = lunes + pd.Timedelta(days=6)
-    # Recortar por el rango del filtro
-    inicio = max(lunes, pd.Timestamp(fecha_ini_filtro))
-    fin    = min(domingo, pd.Timestamp(fecha_fin_filtro))
-    return f"{inicio.strftime('%d/%m/%y')}-{fin.strftime('%d/%m/%y')}"
-
-
-# ─── APP PRINCIPAL ─────────────────────────────────────────────────────────────
-
-# Título
-st.markdown("# 📊 Dashboard de Visitas de Ventas")
-st.markdown(f"<p class='dash-subtitle'>Seguimiento de actividad de campo — Mantenimiento &amp; Prospección</p>",
-            unsafe_allow_html=True)
-st.divider()
-
 # ── Selector de archivo ───────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### ⚙️ Configuración")
     archivo = st.file_uploader(
         "Cargar Excel de visitas",
         type=["xlsx", "xls", "xlsm"],
-        help="Sube tu archivo con las columnas estándar del registro de visitas."
     )
 
-    ruta_default = Path(EXCEL_FILE)
-    if archivo is not None:
-        ruta_usar = archivo
-        fuente_label = f"📂 {archivo.name}"
-    else:
+    ruta_usar = Path(EXCEL_FILE) if archivo is None else archivo
+    if archivo is None:
         st.warning("⚠️ Sube un archivo Excel para comenzar.")
         st.stop()
 
-    st.caption(f"Fuente: **{fuente_label}**")
-    st.divider()
-
-    # Cargar datos
     try:
         df_raw = cargar_datos(ruta_usar)
     except Exception as e:
@@ -184,638 +204,185 @@ with st.sidebar:
         st.error("El archivo está vacío o no tiene filas válidas.")
         st.stop()
 
+    st.divider()
     # ── Filtros ───────────────────────────────────────────────────────────────
     st.markdown("### 🔽 Filtros")
 
+    # Filtro Vendedor
     vendedores_list = ["Todos"] + sorted(df_raw[COL_VENDEDOR].dropna().unique().tolist())
     sel_vendedor = st.selectbox("Vendedor", vendedores_list)
 
-    fecha_min = df_raw[COL_FECHA].min().date()
-    fecha_max = df_raw[COL_FECHA].max().date()
-    sel_rango = st.date_input(
-        "Rango de fechas",
-        value=(fecha_min, fecha_max),
-        min_value=fecha_min,
-        max_value=fecha_max,
-        format="DD/MM/YYYY",
-    )
+    # Filtro Fechas (Mes / Semana)
+    st.markdown("#### Periodo de Filtro")
+    modo_fecha = st.radio("Agrupar por:", ["Mes", "Semana"], horizontal=True)
+    
+    df_raw = df_raw.sort_values(COL_FECHA)
+    
+    if modo_fecha == "Mes":
+        meses_disp = sorted(df_raw["_mes_lbl"].dropna().unique().tolist())
+        if not meses_disp:
+            sel_rango = []
+        else:
+            sel_rango = st.select_slider(
+                "Rango de Meses", 
+                options=meses_disp, 
+                value=(meses_disp[0], meses_disp[-1]) if len(meses_disp) > 1 else meses_disp[0]
+            )
+    else:
+        sem_disp = sorted(df_raw["_sem_lbl"].dropna().unique().tolist())
+        if not sem_disp:
+            sel_rango = []
+        else:
+            sel_rango = st.select_slider(
+                "Rango de Semanas", 
+                options=sem_disp, 
+                value=(sem_disp[0], sem_disp[-1]) if len(sem_disp) > 1 else sem_disp[0]
+            )
 
     st.divider()
-    if st.button("↻ Limpiar caché y recargar"):
+    if st.button("↻ Limpiar caché e ir a inicio"):
         st.cache_data.clear()
         st.rerun()
 
 # ── Aplicar filtros ────────────────────────────────────────────────────────────
 dff = df_raw.copy()
+
 if sel_vendedor != "Todos":
     dff = dff[dff[COL_VENDEDOR] == sel_vendedor]
 
-# Rango de fechas (el widget puede devolver 1 o 2 fechas)
-if isinstance(sel_rango, (list, tuple)) and len(sel_rango) == 2:
-    fecha_ini = pd.Timestamp(sel_rango[0])
-    fecha_fin = pd.Timestamp(sel_rango[1])
-    dff = dff[(dff[COL_FECHA] >= fecha_ini) & (dff[COL_FECHA] <= fecha_fin)]
+rango_label = ""
+if modo_fecha == "Mes" and sel_rango:
+    if isinstance(sel_rango, tuple) and len(sel_rango) == 2:
+        mes_ini, mes_fin = sel_rango[0], sel_rango[1]
+        dff = dff[(dff["_mes_lbl"] >= mes_ini) & (dff["_mes_lbl"] <= mes_fin)]
+        rango_label = f"entre {mes_ini} y {mes_fin}"
+    else:
+        dff = dff[dff["_mes_lbl"] == sel_rango]
+        rango_label = f"en {sel_rango}"
+elif modo_fecha == "Semana" and sel_rango:
+    if isinstance(sel_rango, tuple) and len(sel_rango) == 2:
+        sem_ini, sem_fin = sel_rango[0], sel_rango[1]
+        dff = dff[(dff["_sem_lbl"] >= sem_ini) & (dff["_sem_lbl"] <= sem_fin)]
+        rango_label = f"de {sem_ini} a {sem_fin}"
+    else:
+        dff = dff[dff["_sem_lbl"] == sel_rango]
+        rango_label = f"en {sel_rango}"
 
 with st.sidebar:
     st.caption(f"**{len(dff):,}** registros filtrados")
 
-if dff.empty:
-    st.warning("No hay datos para los filtros seleccionados.")
-    st.stop()
-
-# ── Separar por tipo ───────────────────────────────────────────────────────────
-df_mant = dff[dff["_esMant"]].copy()
-df_pros = dff[~dff["_esMant"]].copy()
-
 # ══════════════════════════════════════════════════════════════════════════════
 graficos_exportar = []
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECCIONES PRINCIPALES EN PESTAÑAS
-# ══════════════════════════════════════════════════════════════════════════════
-tab_pros, tab_mant = st.tabs(["🎯 Prospección", "🔧 Mantenimiento"])
+# ── HEADER PRINCIPAL ──────────────────────────────────────────────────────────
+st.markdown("""
+<div class="header-title-container">
+    <div class="header-title">🗺️ Reporte de Visitas Comerciales</div>
+</div>
+""", unsafe_allow_html=True)
+st.markdown(f"<div style='text-align: center; margin-bottom: 2rem;'><span class='header-subtitle'>Análisis de rutas, conversión y cobertura comercial {rango_label.lower()}</span></div>", unsafe_allow_html=True)
 
-with tab_pros:
-    # SECCIÓN 1 — PROSPECCIÓN
-    # ══════════════════════════════════════════════════════════════════════════════
-    st.markdown("## 🎯 Prospección")
+# ══════════════════════════════════════════════════════════════════════════════
+# PESTAÑAS (Por Región)
+# ══════════════════════════════════════════════════════════════════════════════
+tab_todos, tab_provincia, tab_lima = st.tabs(["🌎 Todos", "🏞️ Provincia", "🏙️ Lima"])
 
-    if df_pros.empty:
-        st.info("No hay datos de Prospección para los filtros actuales.")
+def render_summary_indicators(df_filtro):
+    """Calcula y dibuja las tarjetas indicadoras superiores para la vista."""
+    # 1) Visitas totales (PROSPECCIÓN o MANTENIMIENTO, solo FÍSICA)
+    if COL_TIPO in df_filtro.columns and COL_TIPO_VIS in df_filtro.columns:
+        visitas_fisicas = df_filtro[
+            (df_filtro[COL_TIPO].str.upper().isin(["PROSPECCIÓN", "MANTENIMIENTO"])) & 
+            (df_filtro[COL_TIPO_VIS].str.upper() == "FÍSICA")
+        ]
+        total_visitas = len(visitas_fisicas)
     else:
-        graficos_exportar.append(("SECCIÓN", "Prospección"))
-
-        # ── Cálculos base ─────────────────────────────────────────────────────────
-        # Total de prospectos únicos visitados en el rango
-        total_prospectos = df_pros[COL_CLIENTE].nunique()
-
-        # Etapa más avanzada por prospecto (según el orden del embudo)
+        total_visitas = 0
+    
+    # 2) Prospectos (únicos) -> Filtrando sobre la bolsa de PROSPECCIÓN
+    if COL_TIPO in df_filtro.columns:
+        df_pros = df_filtro[df_filtro[COL_TIPO].str.upper() == "PROSPECCIÓN"]
+    else:
+        df_pros = pd.DataFrame()
+        
+    total_prospectos = df_pros[COL_CLIENTE].nunique() if not df_pros.empty else 0
+    
+    # 3) Cierres (donde la etapa más avanzada calculada fue CIERRE)
+    n_cierres = 0
+    if not df_pros.empty and COL_MOTIVO in df_pros.columns:
         orden_etapa = {e: i for i, e in enumerate(ETAPAS_EMBUDO)}
-        df_pros_etapas = df_pros[df_pros[COL_MOTIVO].isin(ETAPAS_EMBUDO)].copy()
-        df_pros_etapas["_orden"] = df_pros_etapas[COL_MOTIVO].map(orden_etapa)
-        ultima_etapa = (
-            df_pros_etapas.sort_values("_orden")
-            .groupby(COL_CLIENTE)
-            .last()[[COL_MOTIVO]]
-            .reset_index()
-            .rename(columns={COL_MOTIVO: "Etapa"})
-        )
-
-        # Conteo del embudo (por última etapa de cada prospecto)
-        embudo = (
-            ultima_etapa.groupby("Etapa")
-            .size()
-            .reindex(ETAPAS_EMBUDO, fill_value=0)
-            .reset_index(name="Prospectos")
-        )
-        embudo["% del Total"] = (embudo["Prospectos"] / total_prospectos * 100).round(1)
-
-        # Tasa de conversión: prospectos en CIERRE / total prospectos únicos
-        n_cierre = ultima_etapa[ultima_etapa["Etapa"] == "CIERRE"].shape[0]
-        tasa_conv = round(n_cierre / total_prospectos * 100, 1) if total_prospectos else 0.0
-
-        # ── KPI Cards ─────────────────────────────────────────────────────────────
-        kp1, kp2, kp3 = st.columns(3)
-        kp1.metric("Prospectos Visitados", f"{total_prospectos:,}",
-                   help="Total de prospectos únicos visitados en el rango de fechas seleccionado.")
-        kp2.metric("Cierres", f"{n_cierre:,}",
-                   help="Cantidad de prospectos cuya etapa más avanzada registrada es CIERRE.")
-        kp3.metric("Tasa de Conversión", f"{tasa_conv}%",
-                   help="Prospectos que alcanzaron la etapa CIERRE / total prospectos únicos visitados.")
-
-        # ── Ranking por Vendedor (solo cuando se muestran todos) ──────────────────
-        if sel_vendedor == "Todos":
-            st.markdown("### 🏆 Ranking por Vendedor")
-            st.caption("Prospectos únicos visitados y cierres por vendedor en el rango de fechas seleccionado.")
-
-            # Prospectos únicos por vendedor
-            rank_pros = (
-                df_pros.groupby(COL_VENDEDOR)[COL_CLIENTE]
-                .nunique()
-                .reset_index(name="Prospectos Únicos")
+        df_pros_etapas = df_pros[df_pros[COL_MOTIVO].str.upper().isin([e.upper() for e in ETAPAS_EMBUDO])].copy()
+        
+        if not df_pros_etapas.empty:
+            df_pros_etapas["_orden"] = df_pros_etapas[COL_MOTIVO].str.upper().map(orden_etapa)
+            ultima_etapa = (
+                df_pros_etapas.sort_values("_orden")
+                .groupby(COL_CLIENTE)
+                .last()[[COL_MOTIVO]]
+                .reset_index()
             )
+            n_cierres = ultima_etapa[ultima_etapa[COL_MOTIVO].str.upper() == "CIERRE"].shape[0]
 
-            # Cierres por vendedor (etapa más avanzada = CIERRE)
-            if not df_pros_etapas.empty:
-                ultima_etapa_vend = (
-                    df_pros_etapas.sort_values("_orden")
-                    .groupby([COL_VENDEDOR, COL_CLIENTE])
-                    .last()["_orden"]  # solo necesitamos saber si llegó a CIERRE
-                    .reset_index()
-                )
-                idx_cierre = orden_etapa.get("CIERRE", 999)
-                cierres_vend = (
-                    ultima_etapa_vend[ultima_etapa_vend["_orden"] == idx_cierre]
-                    .groupby(COL_VENDEDOR)
-                    .size()
-                    .reset_index(name="Cierres")
-                )
-            else:
-                cierres_vend = pd.DataFrame(columns=[COL_VENDEDOR, "Cierres"])
+    # 4) Conversión
+    tasa_conv = round((n_cierres / total_prospectos * 100), 2) if total_prospectos > 0 else 0.0
 
-            ranking_df = (
-                rank_pros
-                .merge(cierres_vend, on=COL_VENDEDOR, how="left")
-                .fillna({"Cierres": 0})
-            )
-            ranking_df["Cierres"] = ranking_df["Cierres"].astype(int)
-            ranking_df["Tasa Cierre Num"] = (
-                ranking_df["Cierres"] / ranking_df["Prospectos Únicos"] * 100
-            ).fillna(0).round(1)
-            ranking_df = ranking_df.sort_values("Tasa Cierre Num", ascending=False)
+    st.markdown(f"""
+    <div class="kpi-container">
+        <div class="kpi-card">
+            <div class="kpi-value">{total_visitas}</div>
+            <div class="kpi-label">Visitas Totales</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-value">{total_prospectos}</div>
+            <div class="kpi-label">Prospectos</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-value">{n_cierres}</div>
+            <div class="kpi-label">Cierres</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-value">{tasa_conv}%</div>
+            <div class="kpi-label">Conversión</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Footer del KPI card
+    st.markdown(f"""
+    <div style='text-align: center; margin-bottom: 2rem; color: #3b82f6;'>
+        <small>🗓️ <b>Periodo:</b> {sel_rango if isinstance(sel_rango, str) else ' a '.join(list(sel_rango))}</small>
+    </div>
+    """, unsafe_allow_html=True)
 
-            col_rank1, col_rank2 = st.columns([3, 2])
-            with col_rank1:
-                fig_rank = go.Figure()
-                fig_rank.add_trace(go.Bar(
-                    x=ranking_df[COL_VENDEDOR],
-                    y=ranking_df["Cierres"],
-                    name="Cierres",
-                    marker_color=COLORES_PRINCIPALES["verde"],
-                    text=ranking_df["Cierres"],
-                    textposition="outside", cliponaxis=False,
-                ))
-                fig_rank.add_trace(go.Bar(
-                    x=ranking_df[COL_VENDEDOR],
-                    y=ranking_df["Prospectos Únicos"],
-                    name="Prospectos Únicos",
-                    marker_color=COLORES_PRINCIPALES["azul"],
-                    text=ranking_df["Prospectos Únicos"],
-                    textposition="outside", cliponaxis=False,
-                ))
-                fig_rank.update_layout(
-                    **LAYOUT_BASE,
-                    barmode="group",
-                    height=420,
-                    xaxis_title="",
-                    yaxis_title="",
-                    legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1),
-                )
-                st.plotly_chart(fig_rank, use_container_width=True, theme="streamlit")
-                graficos_exportar.append(("Prospección - Ranking por Vendedor", fig_rank))
-
-            with col_rank2:
-                tabla_rank = ranking_df[[COL_VENDEDOR, "Cierres", "Prospectos Únicos", "Tasa Cierre Num"]].copy()
-                tabla_rank.rename(columns={"Tasa Cierre Num": "Tasa Cierre"}, inplace=True)
-                tabla_rank["Tasa Cierre"] = tabla_rank["Tasa Cierre"].astype(str) + "%"
-                st.dataframe(tabla_rank, use_container_width=True, hide_index=True)
-
-        st.divider()
-
-
-        # ── Indicador 2: Embudo de Prospección ────────────────────────────────────
-        st.markdown("### 🔽 Embudo de Prospección")
-        st.caption("Cada prospecto se cuenta una sola vez, en su etapa más avanzada registrada dentro del rango de fechas.")
-
-        col_emb1, col_emb2 = st.columns([1, 1])
-
-        with col_emb1:
-            fig_funnel = go.Figure(go.Funnel(
-                y=embudo["Etapa"],
-                x=embudo["Prospectos"],
-                text=[f"{p}  ({pct}%)" for p, pct in zip(embudo["Prospectos"], embudo["% del Total"])],
-                textinfo="text",
-                marker=dict(color=PALETA_EMBUDO[:len(embudo)]),
-                connector=dict(line=dict(color="#2e3a55", width=2)),
-            ))
-            fig_funnel.update_layout(**LAYOUT_BASE, height=380)
-            st.plotly_chart(fig_funnel, use_container_width=True, theme="streamlit")
-            graficos_exportar.append(("Prospección - Embudo de Prospección", fig_funnel))
-
-        with col_emb2:
-            # Tabla del embudo
-            st.dataframe(
-                embudo[embudo["Prospectos"] > 0].style.format({"% del Total": "{:.1f}%"}),
-                use_container_width=True,
-                hide_index=True,
-            )
-
-        st.divider()
-
-        # ── Indicador 4: Actividad por Ciudad ─────────────────────────────────────
-        st.markdown("### 🏙️ Actividad por Ciudad")
-
-        col_ciu1, col_ciu2 = st.columns([3, 2])
-
-        ciudad_counts = (
-            df_pros.groupby(COL_DISTRITO)
-            .size()
-            .reset_index(name="Visitas")
-            .sort_values("Visitas", ascending=False)
-        )
-        total_vis_ciu = len(df_pros)
-        ciudad_counts["% del Total"] = (ciudad_counts["Visitas"] / total_vis_ciu * 100).round(1)
-
-        with col_ciu1:
-            fig_ciudad = px.bar(
-                ciudad_counts,
-                x=COL_DISTRITO, y="Visitas",
-                color="Visitas",
-                color_continuous_scale=bar_scale("#4f8ef7"),
-                text="Visitas",
-            )
-            fig_ciudad.update_traces(textposition="outside", cliponaxis=False)
-            fig_ciudad.update_layout(**LAYOUT_BASE, height=320,
-                                      xaxis_title="", yaxis_title="Nº Visitas",
-                                      coloraxis_showscale=False)
-            st.plotly_chart(fig_ciudad, use_container_width=True, theme="streamlit")
-            graficos_exportar.append(("Prospección - Actividad por Ciudad", fig_ciudad))
-
-        with col_ciu2:
-            st.dataframe(
-                ciudad_counts.style.format({"% del Total": "{:.1f}%"}),
-                use_container_width=True,
-                hide_index=True,
-            )
-
-        st.divider()
-
-        # ── Indicador 5: Actividad por Giro ───────────────────────────────────────
-        st.markdown("### 🏷️ Actividad por Giro")
-
-        giro_counts = (
-            df_pros.groupby(COL_TIPO_CLI)
-            .size()
-            .reset_index(name="Visitas")
-            .sort_values("Visitas", ascending=False)
-        )
-        total_vis_pros_n = len(df_pros)
-        giro_counts["% del Total"] = (giro_counts["Visitas"] / total_vis_pros_n * 100).round(1)
-
-        col_giro1, col_giro2 = st.columns([3, 2])
-
-        with col_giro1:
-            fig_giro = px.pie(
-                giro_counts,
-                names=COL_TIPO_CLI, values="Visitas",
-                hole=0.45,
-                color_discrete_sequence=list(COLORES_PRINCIPALES.values()),
-            )
-            fig_giro.update_traces(textinfo="percent+label", textposition="outside")
-            fig_giro.update_layout(**LAYOUT_BASE, height=320, showlegend=False)
-            st.plotly_chart(fig_giro, use_container_width=True, theme="streamlit")
-            graficos_exportar.append(("Prospección - Actividad por Giro", fig_giro))
-
-        with col_giro2:
-            st.dataframe(
-                giro_counts.style.format({"% del Total": "{:.1f}%"}),
-                use_container_width=True,
-                hide_index=True,
-            )
-
-        st.divider()
-
-        # ── Indicador 6: Frecuencia de Visitas ────────────────────────────────────
-        st.markdown("### 📊 Frecuencia de Visitas por Prospecto")
-
-        freq = (
-            df_pros.groupby(COL_CLIENTE)
-            .size()
-            .reset_index(name="Nº Visitas")
-            .sort_values("Nº Visitas", ascending=False)
-        )
-
-        col_frq1, col_frq2 = st.columns([3, 2])
-
-        with col_frq1:
-            fig_freq = px.bar(
-                freq,
-                x=COL_CLIENTE, y="Nº Visitas",
-                color="Nº Visitas",
-                color_continuous_scale=bar_scale("#1fc98e"),
-                text="Nº Visitas",
-            )
-            fig_freq.update_traces(textposition="outside", cliponaxis=False)
-            fig_freq.update_layout(**LAYOUT_BASE, height=340,
-                                    xaxis_title="", yaxis_title="Nº Visitas",
-                                    xaxis_tickangle=-35, coloraxis_showscale=False)
-            st.plotly_chart(fig_freq, use_container_width=True, theme="streamlit")
-            graficos_exportar.append(("Prospección - Frecuencia de Visitas por Prospecto", fig_freq))
-
-        with col_frq2:
-            st.dataframe(freq, use_container_width=True, hide_index=True)
-
-        st.divider()
-
-        # ── Indicador 7: Visitas por Semana ───────────────────────────────────────
-        st.markdown("### 📅 Visitas por Semana")
-        st.caption("Semanas en orden relativo al rango de fechas. Los extremos se recortan según las fechas del filtro.")
-
-        # Obtener fechas del filtro activo (o rango global si no se aplicó)
-        if isinstance(sel_rango, (list, tuple)) and len(sel_rango) == 2:
-            fi_filtro, ff_filtro = sel_rango[0], sel_rango[1]
-        else:
-            fi_filtro = df_pros[COL_FECHA].min().date()
-            ff_filtro = df_pros[COL_FECHA].max().date()
-
-        semanas_ordenadas = sorted(df_pros["_sem_lbl"].unique())
-        sem_mapa = {
-            s: f"Semana {i+1} ({etiqueta_semana(s, fi_filtro, ff_filtro)})"
-            for i, s in enumerate(semanas_ordenadas)
-        }
-
-        sem_pros = (
-            df_pros.groupby("_sem_lbl")
-            .size()
-            .reset_index(name="Visitas")
-            .sort_values("_sem_lbl")
-        )
-        sem_pros["Semana"] = sem_pros["_sem_lbl"].map(sem_mapa)
-
-        fig_sem = px.bar(
-            sem_pros,
-            x="Semana", y="Visitas",
-            color="Visitas",
-            color_continuous_scale=bar_scale("#9b74f7"),
-            text="Visitas",
-        )
-        fig_sem.update_traces(textposition="outside", cliponaxis=False)
-        fig_sem.update_layout(**LAYOUT_BASE, height=340,
-                               xaxis_title="", yaxis_title="Nº Visitas",
-                               coloraxis_showscale=False)
-        st.plotly_chart(fig_sem, use_container_width=True, theme="streamlit")
-        graficos_exportar.append(("Prospección - Visitas por Semana", fig_sem))
-
-    st.divider()
-
-    # ══════════════════════════════════════════════════════════════════════════════
-
-with tab_mant:
-    # SECCIÓN 2 — MANTENIMIENTO
-    # ══════════════════════════════════════════════════════════════════════════════
-    st.markdown("## 🔧 Mantenimiento")
-
-    if df_mant.empty:
-        st.info("No hay datos de Mantenimiento para los filtros actuales.")
+with tab_todos:
+    if dff.empty:
+        st.info("No hay datos para mostrar.")
     else:
-        graficos_exportar.append(("SECCIÓN", "Mantenimiento"))
+        render_summary_indicators(dff)
+        st.info("💡  Aquí verás más indicadores en futuras actualizaciones, incluyendo gráficos detallados de los movimientos comerciales del mes.")
 
-        # ── Cálculos base ────────────────────────────────────────────────────
-        total_vis_mant   = len(df_mant)
-        n_pedido         = (df_mant[COL_MOTIVO] == "TOMAR PEDIDO").sum()
-        tasa_conv_mant   = round(n_pedido / total_vis_mant * 100, 1) if total_vis_mant else 0.0
-
-        # ── KPI Cards ─────────────────────────────────────────────────────
-        km1, km2, km3 = st.columns(3)
-        km1.metric("Total Visitas a Clientes", f"{total_vis_mant:,}",
-                   help="Total de visitas (incluyendo múltiples visitas al mismo cliente) en el rango de fechas.")
-        km2.metric("Visitas con Pedido", f"{n_pedido:,}",
-                   help="Cantidad de visitas registradas con motivo TOMAR PEDIDO.")
-        km3.metric("Tasa de Conversión", f"{tasa_conv_mant}%",
-                   help="Visitas con motivo TOMAR PEDIDO / total visitas de mantenimiento.")
-
-        # ── Ranking por Vendedor (solo cuando se muestran todos) ──────────────────
-        if sel_vendedor == "Todos":
-            st.markdown("### 🏆 Ranking por Vendedor")
-            st.caption("Total de visitas y visitas con pedido por vendedor en el rango de fechas seleccionado.")
-
-            # Total visitas por vendedor
-            rank_mant = (
-                df_mant.groupby(COL_VENDEDOR)
-                .size()
-                .reset_index(name="Total Visitas")
-            )
-
-            # Visitas con pedido por vendedor
-            pedidos_vend = (
-                df_mant[df_mant[COL_MOTIVO] == "TOMAR PEDIDO"]
-                .groupby(COL_VENDEDOR)
-                .size()
-                .reset_index(name="Con Pedido")
-            )
-
-            ranking_m_df = (
-                rank_mant
-                .merge(pedidos_vend, on=COL_VENDEDOR, how="left")
-                .fillna({"Con Pedido": 0})
-            )
-            ranking_m_df["Con Pedido"] = ranking_m_df["Con Pedido"].astype(int)
-            ranking_m_df["Tasa Conv Num"] = (
-                ranking_m_df["Con Pedido"] / ranking_m_df["Total Visitas"] * 100
-            ).fillna(0).round(1)
-            ranking_m_df = ranking_m_df.sort_values("Tasa Conv Num", ascending=False)
-
-            col_mrank1, col_mrank2 = st.columns([3, 2])
-            with col_mrank1:
-                fig_mrank = go.Figure()
-                fig_mrank.add_trace(go.Bar(
-                    x=ranking_m_df[COL_VENDEDOR],
-                    y=ranking_m_df["Con Pedido"],
-                    name="Con Pedido",
-                    marker_color=COLORES_PRINCIPALES["amarillo"],
-                    text=ranking_m_df["Con Pedido"],
-                    textposition="outside",
-                    cliponaxis=False,
-                ))
-                fig_mrank.add_trace(go.Bar(
-                    x=ranking_m_df[COL_VENDEDOR],
-                    y=ranking_m_df["Total Visitas"],
-                    name="Total Visitas",
-                    marker_color=COLORES_PRINCIPALES["azul"],
-                    text=ranking_m_df["Total Visitas"],
-                    textposition="outside",
-                    cliponaxis=False,
-                ))
-                fig_mrank.update_layout(
-                    **LAYOUT_BASE,
-                    barmode="group",
-                    height=420,
-                    xaxis_title="",
-                    yaxis_title="",
-                    legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1),
-                )
-                st.plotly_chart(fig_mrank, use_container_width=True, theme="streamlit")
-                graficos_exportar.append(("Mantenimiento - Ranking", fig_mrank))
-
-            with col_mrank2:
-                tabla_mrank = ranking_m_df[[COL_VENDEDOR, "Con Pedido", "Total Visitas", "Tasa Conv Num"]].copy()
-                tabla_mrank.rename(columns={"Tasa Conv Num": "Tasa Conv."}, inplace=True)
-                tabla_mrank["Tasa Conv."] = tabla_mrank["Tasa Conv."].astype(str) + "%"
-                st.dataframe(tabla_mrank, use_container_width=True, hide_index=True)
-
-        st.divider()
-
-        # ── Indicador 2: Mix de Mantenimiento ──────────────────────────────────
-        st.markdown("### 🧩 Mix de Mantenimiento")
-        st.caption("Distribución de visitas según motivo. Se contabilizan todas las visitas del rango.")
-
-        MOT_MANT_ORDEN = ["TOMAR PEDIDO", "CAPACITACIÓN", "LANZAMIENTO", "COBRANZA", "RECLAMO", "OTROS"]
-        mix_counts = (
-            df_mant.groupby(COL_MOTIVO)
-            .size()
-            .reindex(MOT_MANT_ORDEN, fill_value=0)
-            .reset_index(name="Visitas")
-        )
-        mix_counts["% del Total"] = (mix_counts["Visitas"] / total_vis_mant * 100).round(1)
-
-        col_mix1, col_mix2 = st.columns([1, 1])
-
-        with col_mix1:
-            fig_mix = px.pie(
-                mix_counts,
-                names=COL_MOTIVO, values="Visitas",
-                hole=0.45,
-                color_discrete_sequence=list(COLORES_PRINCIPALES.values()),
-            )
-            fig_mix.update_traces(textinfo="percent+label", textposition="outside")
-            fig_mix.update_layout(**LAYOUT_BASE, height=360, showlegend=False)
-            st.plotly_chart(fig_mix, use_container_width=True, theme="streamlit")
-            graficos_exportar.append(("Mantenimiento - Mix de Mantenimiento", fig_mix))
-
-        with col_mix2:
-            st.dataframe(
-                mix_counts.style.format({"% del Total": "{:.1f}%"}),
-                use_container_width=True,
-                hide_index=True,
-            )
-
-        st.divider()
-
-        # ── Indicador 4: Actividad por Ciudad ─────────────────────────────────
-        st.markdown("### 🏙️ Actividad por Ciudad")
-
-        col_mciu1, col_mciu2 = st.columns([3, 2])
-
-        mciu_counts = (
-            df_mant.groupby(COL_DISTRITO)
-            .size()
-            .reset_index(name="Visitas")
-            .sort_values("Visitas", ascending=False)
-        )
-        mciu_counts["% del Total"] = (mciu_counts["Visitas"] / total_vis_mant * 100).round(1)
-
-        with col_mciu1:
-            fig_mciu = px.bar(
-                mciu_counts,
-                x=COL_DISTRITO, y="Visitas",
-                color="Visitas",
-                color_continuous_scale=bar_scale("#4f8ef7"),
-                text="Visitas",
-            )
-            fig_mciu.update_traces(textposition="outside", cliponaxis=False)
-            fig_mciu.update_layout(**LAYOUT_BASE, height=320,
-                                    xaxis_title="", yaxis_title="Nº Visitas",
-                                    coloraxis_showscale=False)
-            st.plotly_chart(fig_mciu, use_container_width=True, theme="streamlit")
-            graficos_exportar.append(("Mantenimiento - Actividad por Ciudad", fig_mciu))
-
-        with col_mciu2:
-            st.dataframe(
-                mciu_counts.style.format({"% del Total": "{:.1f}%"}),
-                use_container_width=True,
-                hide_index=True,
-            )
-
-        st.divider()
-
-        # ── Indicador 5: Actividad por Giro ──────────────────────────────────
-        st.markdown("### 🏷️ Actividad por Giro")
-
-        mgiro_counts = (
-            df_mant.groupby(COL_TIPO_CLI)
-            .size()
-            .reset_index(name="Visitas")
-            .sort_values("Visitas", ascending=False)
-        )
-        mgiro_counts["% del Total"] = (mgiro_counts["Visitas"] / total_vis_mant * 100).round(1)
-
-        col_mgiro1, col_mgiro2 = st.columns([3, 2])
-
-        with col_mgiro1:
-            fig_mgiro = px.pie(
-                mgiro_counts,
-                names=COL_TIPO_CLI, values="Visitas",
-                hole=0.45,
-                color_discrete_sequence=list(COLORES_PRINCIPALES.values()),
-            )
-            fig_mgiro.update_traces(textinfo="percent+label", textposition="outside")
-            fig_mgiro.update_layout(**LAYOUT_BASE, height=320, showlegend=False)
-            st.plotly_chart(fig_mgiro, use_container_width=True, theme="streamlit")
-            graficos_exportar.append(("Mantenimiento - Actividad por Giro", fig_mgiro))
-
-        with col_mgiro2:
-            st.dataframe(
-                mgiro_counts.style.format({"% del Total": "{:.1f}%"}),
-                use_container_width=True,
-                hide_index=True,
-            )
-
-        st.divider()
-
-        # ── Indicador 6: Frecuencia de Visitas ──────────────────────────────
-        st.markdown("### 📊 Frecuencia de Visitas por Cliente")
-
-        mfreq = (
-            df_mant.groupby(COL_CLIENTE)
-            .size()
-            .reset_index(name="Nº Visitas")
-            .sort_values("Nº Visitas", ascending=False)
-        )
-
-        col_mfrq1, col_mfrq2 = st.columns([3, 2])
-
-        with col_mfrq1:
-            fig_mfreq = px.bar(
-                mfreq,
-                x=COL_CLIENTE, y="Nº Visitas",
-                color="Nº Visitas",
-                color_continuous_scale=bar_scale("#f7954f"),
-                text="Nº Visitas",
-            )
-            fig_mfreq.update_traces(textposition="outside", cliponaxis=False)
-            fig_mfreq.update_layout(**LAYOUT_BASE, height=340,
-                                     xaxis_title="", yaxis_title="Nº Visitas",
-                                     xaxis_tickangle=-35, coloraxis_showscale=False)
-            st.plotly_chart(fig_mfreq, use_container_width=True, theme="streamlit")
-            graficos_exportar.append(("Mantenimiento - Frecuencia de Visitas por Cliente", fig_mfreq))
-
-        with col_mfrq2:
-            st.dataframe(mfreq, use_container_width=True, hide_index=True)
-
-        st.divider()
-
-        # ── Indicador 7: Visitas por Semana ────────────────────────────────
-        st.markdown("### 📅 Visitas por Semana")
-        st.caption("Semanas en orden relativo al rango de fechas. Los extremos se recortan según las fechas del filtro.")
-
-        if isinstance(sel_rango, (list, tuple)) and len(sel_rango) == 2:
-            fi_m, ff_m = sel_rango[0], sel_rango[1]
+with tab_provincia:
+    if COL_REGION in dff.columns:
+        df_prov = dff[dff[COL_REGION].str.upper() == "PROVINCIA"]
+        if df_prov.empty:
+            st.info("No hay datos de Provincia para los filtros actuales.")
         else:
-            fi_m = df_mant[COL_FECHA].min().date()
-            ff_m = df_mant[COL_FECHA].max().date()
+            st.info("💡 Indicadores específicos de Provincia estarán disponibles aquí.")
+    else:
+        st.warning("Falta la columna Región en la data procesada.")
 
-        semanas_m_ord = sorted(df_mant["_sem_lbl"].unique())
-        sem_mapa_m = {
-            s: f"Semana {i+1} ({etiqueta_semana(s, fi_m, ff_m)})"
-            for i, s in enumerate(semanas_m_ord)
-        }
+with tab_lima:
+    if COL_REGION in dff.columns:
+        df_lim = dff[dff[COL_REGION].str.upper() == "LIMA"]
+        if df_lim.empty:
+            st.info("No hay datos de Lima para los filtros actuales.")
+        else:
+            st.info("💡 Indicadores específicos de Lima estarán disponibles aquí.")
+    else:
+        st.warning("Falta la columna Región en la data procesada.")
 
-        sem_mant_df = (
-            df_mant.groupby("_sem_lbl")
-            .size()
-            .reset_index(name="Visitas")
-            .sort_values("_sem_lbl")
-        )
-        sem_mant_df["Semana"] = sem_mant_df["_sem_lbl"].map(sem_mapa_m)
-
-        fig_sem_m = px.bar(
-            sem_mant_df,
-            x="Semana", y="Visitas",
-            color="Visitas",
-            color_continuous_scale=bar_scale("#f7d14f"),
-            text="Visitas",
-        )
-        fig_sem_m.update_traces(textposition="outside", cliponaxis=False)
-        fig_sem_m.update_layout(**LAYOUT_BASE, height=340,
-                                 xaxis_title="", yaxis_title="Nº Visitas",
-                                 coloraxis_showscale=False)
-        st.plotly_chart(fig_sem_m, use_container_width=True, theme="streamlit")
-        graficos_exportar.append(("Mantenimiento - Visitas por Semana", fig_sem_m))
-
-    st.divider()
 
 # ══════════════════════════════════════════════════════════════════════════════
-
 # ─── LÓGICA DE EXPORTACIÓN PPTX (SIDEBAR) ──────────────────────────────────────
 with st.sidebar:
     st.divider()
@@ -825,34 +392,28 @@ with st.sidebar:
     
     if st.button("Generar Presentación (PPTX)", use_container_width=True):
         if not graficos_exportar:
-            st.warning("No hay gráficos para exportar.")
+            st.warning("No hay gráficos para exportar por el momento.")
         else:
-            with st.spinner("Generando diapositivas... (puede tardar unos segundos)"):
+            with st.spinner("Generando diapositivas..."):
                 try:
                     prs = Presentation()
-                    # Definir tamaño ancho por defecto
                     prs.slide_width = Inches(13.33)
                     prs.slide_height = Inches(7.5)
-                    
-                    # Layout en blanco
                     blank_slide_layout = prs.slide_layouts[6] 
                     
                     for titulo, fig in graficos_exportar:
                         if titulo == "SECCIÓN":
-                            # Diapositiva de separador
                             slide = prs.slides.add_slide(blank_slide_layout)
                             if export_dark:
                                 slide.background.fill.solid()
                                 slide.background.fill.fore_color.rgb = RGBColor(14, 17, 23)
-                                
+                            
                             txBox = slide.shapes.add_textbox(Inches(1), Inches(3), Inches(11.33), Inches(2))
-                            tf = txBox.text_frame
-                            p = tf.add_paragraph()
+                            p = txBox.text_frame.add_paragraph()
                             p.text = fig
                             p.font.size = Pt(64)
                             p.font.bold = True
-                            if export_dark:
-                                p.font.color.rgb = RGBColor(250, 250, 250)
+                            if export_dark: p.font.color.rgb = RGBColor(250, 250, 250)
                             continue
 
                         slide = prs.slides.add_slide(blank_slide_layout)
@@ -860,19 +421,14 @@ with st.sidebar:
                             slide.background.fill.solid()
                             slide.background.fill.fore_color.rgb = RGBColor(14, 17, 23)
                         
-                        # Añadir título
                         txBox = slide.shapes.add_textbox(Inches(0.5), Inches(0.2), Inches(12.33), Inches(0.8))
-                        tf = txBox.text_frame
-                        p = tf.add_paragraph()
+                        p = txBox.text_frame.add_paragraph()
                         p.text = titulo
                         p.font.size = Pt(28)
                         p.font.bold = True
-                        if export_dark:
-                            p.font.color.rgb = RGBColor(250, 250, 250)
+                        if export_dark: p.font.color.rgb = RGBColor(250, 250, 250)
                         
-                        # Exportar imagen
                         img_bytes = io.BytesIO()
-                        # Modificamos temporalmente el tamaño y márgenes para exportar
                         bg_color_fig = "#0e1117" if export_dark else "white"
                         font_color_fig = "white" if export_dark else "black"
                         
@@ -882,16 +438,13 @@ with st.sidebar:
                             font=dict(color=font_color_fig),
                             margin=dict(t=60, b=130, l=40, r=40)
                         )
-                        # Forzar que los ejes no recorten largos textos si crecen
                         fig.update_xaxes(automargin=True)
                         fig.update_yaxes(automargin=True)
                         fig.write_image(img_bytes, format="png", width=1200, height=600, scale=2)
                         img_bytes.seek(0)
                         
-                        # Añadir imagen a la diapositiva
                         slide.shapes.add_picture(img_bytes, Inches(1), Inches(1.2), width=Inches(11.33))
                     
-                    # Guardar PPTX en memoria
                     pptx_out = io.BytesIO()
                     prs.save(pptx_out)
                     pptx_out.seek(0)
@@ -903,49 +456,38 @@ with st.sidebar:
                     st.error(f"Error al generar la presentación: {e}")
 
     if "pptx_data" in st.session_state:
-        # Generar nombre del archivo basado en los filtros
-        if isinstance(sel_rango, (list, tuple)):
-            if len(sel_rango) == 2:
-                f_ini_str = sel_rango[0].strftime("%d.%m.%Y")
-                f_fin_str = sel_rango[1].strftime("%d.%m.%Y")
-                fecha_lbl = f_ini_str if f_ini_str == f_fin_str else f"{f_ini_str}-{f_fin_str}"
-            elif len(sel_rango) == 1:
-                fecha_lbl = sel_rango[0].strftime("%d.%m.%Y")
-            else:
-                fecha_lbl = ""
-        else:
-            fecha_lbl = sel_rango.strftime("%d.%m.%Y") if hasattr(sel_rango, 'strftime') else ""
-            
-        nombre_str = f"{sel_vendedor} {fecha_lbl}".strip() + ".pptx"
-
         st.download_button(
             label="Descargar Presentación",
             data=st.session_state["pptx_data"],
-            file_name=nombre_str,
+            file_name=f"Reporte_Export_{sel_vendedor}.pptx",
             mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
             use_container_width=True,
             type="primary"
         )
 
 
-# SECCIÓN 5 — TABLA DE DETALLE
+# SECCIÓN FINAL — TABLA DE DETALLE
 # ══════════════════════════════════════════════════════════════════════════════
 st.markdown("## 📋 Detalle de Visitas")
 
-tab1, tab2, tab3 = st.tabs(["📁 Todos los registros", "🔧 Mantenimiento", "🎯 Prospección"])
+tab_dt_todos, tab_dt_prov, tab_dt_lima = st.tabs(["🌎 Todos", "🏞️ Provincia", "🏙️ Lima"])
 
-cols_mostrar = [COL_VENDEDOR, COL_FECHA, COL_TIPO, COL_CLIENTE,
+cols_mostrar = [COL_FECHA, COL_VENDEDOR, COL_REGION, COL_TIPO, COL_TIPO_VIS, COL_CLIENTE,
                 COL_DISTRITO, COL_MOTIVO, COL_RESULTADO]
 
 def prep_detalle(df):
-    """Prepara el df para mostrar: convierte FECHA a solo fecha."""
-    d = df[cols_mostrar].copy()
-    d[COL_FECHA] = d[COL_FECHA].dt.date
-    return d.sort_values(COL_FECHA, ascending=False)
+    disponibles = [c for c in cols_mostrar if c in df.columns]
+    d = df[disponibles].copy()
+    if COL_FECHA in d.columns:
+        d[COL_FECHA] = d[COL_FECHA].dt.date
+        d = d.sort_values(COL_FECHA, ascending=False)
+    return d
 
-with tab1:
+with tab_dt_todos:
     st.dataframe(prep_detalle(dff), use_container_width=True, hide_index=True)
-with tab2:
-    st.dataframe(prep_detalle(df_mant), use_container_width=True, hide_index=True)
-with tab3:
-    st.dataframe(prep_detalle(df_pros), use_container_width=True, hide_index=True)
+with tab_dt_prov:
+    if COL_REGION in dff.columns:
+        st.dataframe(prep_detalle(dff[dff[COL_REGION].str.upper() == "PROVINCIA"]), use_container_width=True, hide_index=True)
+with tab_dt_lima:
+    if COL_REGION in dff.columns:
+        st.dataframe(prep_detalle(dff[dff[COL_REGION].str.upper() == "LIMA"]), use_container_width=True, hide_index=True)
