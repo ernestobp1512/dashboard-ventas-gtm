@@ -473,6 +473,10 @@ dff = dff[(dff[COL_FILTRO] >= sel_ini_key) & (dff[COL_FILTRO] <= sel_fin_key)]
 if COL_ZONA in dff.columns:
     dff = dff[dff[COL_ZONA].str.upper() != 'OFICINA']
 
+# Excluir cliente GO TO MARKET de todos los analisis
+if COL_CLIENTE in dff.columns:
+    dff = dff[dff[COL_CLIENTE].str.upper().str.strip() != 'GO TO MARKET']
+
 # num_periodos = cantidad de periodos en el rango
 idx_ini = opciones_keys.index(sel_ini_key)
 idx_fin = opciones_keys.index(sel_fin_key)
@@ -534,15 +538,15 @@ def calc_kpis(df_filtro):
 
 
 def calc_visitas_planificadas(df_region, meta_df, num_p):
-    # Visitas planificadas = umbral_activo x zonas_activas x num_periodos
-    if COL_ZONA not in df_region.columns:
+    # Visitas planificadas = umbral_activo x vendedores_activos x num_periodos
+    if COL_VENDEDOR not in df_region.columns:
         return None
     df_fis = df_region[
         df_region[COL_TIPO].str.upper().isin(['PROSPECCION', 'PROSPECCIÓN', 'MANTENIMIENTO']) &
         df_region.get(COL_TIPO_VIS, pd.Series(dtype=str)).str.upper().isin(['FISICA', 'FÍSICA'])
     ]
-    zonas_activas = df_fis[COL_ZONA].nunique()
-    if zonas_activas == 0:
+    vendedores_activos = df_fis[COL_VENDEDOR].nunique()
+    if vendedores_activos == 0:
         return None
     if meta_df.empty or 'Cantidad' not in meta_df.columns or 'Estado' not in meta_df.columns:
         return None
@@ -552,7 +556,7 @@ def calc_visitas_planificadas(df_region, meta_df, num_p):
     if fila_activo.empty:
         return None
     umbral = int(fila_activo['Cantidad'].iloc[0])
-    return umbral * zonas_activas * num_p
+    return umbral * vendedores_activos * num_p
 
 
 def obtener_estado(visitas, meta_df, num_p):
