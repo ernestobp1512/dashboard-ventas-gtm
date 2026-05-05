@@ -239,6 +239,28 @@ def cargar_datos_completos(ruta):
     except Exception:
         df_est_mes = pd.DataFrame(columns=["Estado","Cantidad"])
 
+    # ── Limpieza: eliminar filas con campos obligatorios vacíos ──────────────
+    CAMPOS_OBLIGATORIOS = [
+        "Id", "Date", "Time", "Zona", "Cliente o Prospecto",
+        "Tipo", "Task", "User", "Giro", "Departamento",
+        "Provincia", "Distrito", "Tipo Visita", "Id Cliente Prospecto",
+    ]
+    cols_a_validar = [c for c in CAMPOS_OBLIGATORIOS if c in df_log.columns]
+    filas_antes = len(df_log)
+
+    for c in cols_a_validar:
+        try:
+            if df_log[c].dtype == object:
+                # Convertir a str, limpiar espacios, marcar vacíos como NaN
+                df_log[c] = (df_log[c].astype(str).str.strip()
+                             .replace({"nan": None, "None": None,
+                                       "NaT": None, "": None}))
+        except Exception:
+            pass  # columnas numéricas/fecha se dejan para dropna
+
+    df_log = df_log.dropna(subset=cols_a_validar)
+    df_log._filas_descartadas = filas_antes - len(df_log)
+
     return df_log, df_est_sem, df_est_mes
 
 # ── Selector de archivo ───────────────────────────────────────────────────────
@@ -447,6 +469,10 @@ if sel_vendedor != "Todos":
 
 dff = dff[(dff[COL_FILTRO] >= sel_ini_key) & (dff[COL_FILTRO] <= sel_fin_key)]
 
+# Excluir zona OFICINA de todos los analisis
+if COL_ZONA in dff.columns:
+    dff = dff[dff[COL_ZONA].str.upper() != 'OFICINA']
+
 # num_periodos = cantidad de periodos en el rango
 idx_ini = opciones_keys.index(sel_ini_key)
 idx_fin = opciones_keys.index(sel_fin_key)
@@ -505,6 +531,28 @@ def calc_kpis(df_filtro):
             n_cierres = ultima[ultima[COL_MOTIVO].str.upper() == "CIERRE"].shape[0]
     t_conv = round(n_cierres / tot_pros * 100, 2) if tot_pros > 0 else 0.0
     return tot_vis, tot_pros, n_cierres, t_conv
+
+
+def calc_visitas_planificadas(df_region, meta_df, num_p):
+    # Visitas planificadas = umbral_activo x zonas_activas x num_periodos
+    if COL_ZONA not in df_region.columns:
+        return None
+    df_fis = df_region[
+        df_region[COL_TIPO].str.upper().isin(['PROSPECCION', 'PROSPECCIÓN', 'MANTENIMIENTO']) &
+        df_region.get(COL_TIPO_VIS, pd.Series(dtype=str)).str.upper().isin(['FISICA', 'FÍSICA'])
+    ]
+    zonas_activas = df_fis[COL_ZONA].nunique()
+    if zonas_activas == 0:
+        return None
+    if meta_df.empty or 'Cantidad' not in meta_df.columns or 'Estado' not in meta_df.columns:
+        return None
+    meta_cp = meta_df.copy()
+    meta_cp['Cantidad'] = pd.to_numeric(meta_cp['Cantidad'], errors='coerce').fillna(0)
+    fila_activo = meta_cp[meta_cp['Estado'].astype(str).str.upper().str.contains('ACTIVO', na=False)]
+    if fila_activo.empty:
+        return None
+    umbral = int(fila_activo['Cantidad'].iloc[0])
+    return umbral * zonas_activas * num_p
 
 
 def obtener_estado(visitas, meta_df, num_p):
@@ -584,8 +632,16 @@ def render_region_dashboard(df_region, region_nombre, is_todos=False):
     )
 
     tot_vis, tot_pros, n_cierres, t_conv = calc_kpis(df_region)
+    vis_plan = calc_visitas_planificadas(df_region, df_estado_usar, num_periodos)
+    if vis_plan and vis_plan > 0:
+        tasa_vis = round(tot_vis / vis_plan * 100, 1)
+        vis_kpi_val = f'{tot_vis:,} / {vis_plan:,}'
+        vis_kpi_sub = f'<div style="font-size:13px;color:#10b981;font-weight:700;margin-top:2px;">{tasa_vis}% del planificado</div>'
+    else:
+        vis_kpi_val = str(tot_vis)
+        vis_kpi_sub = ''
     st.markdown(f"""<div class="kpi-container">
-<div class="kpi-card"><div class="kpi-label">Visitas Totales</div><div class="kpi-value">{tot_vis}</div><div class="kpi-card-icon">👥</div></div>
+<div class="kpi-card"><div class="kpi-label">Visitas Totales</div><div class="kpi-value">{vis_kpi_val}</div>{vis_kpi_sub}<div class="kpi-card-icon">👥</div></div>
 <div class="kpi-card"><div class="kpi-label">Prospectos Únicos</div><div class="kpi-value">{tot_pros}</div><div class="kpi-card-icon">👤</div></div>
 <div class="kpi-card"><div class="kpi-label">Cierres</div><div class="kpi-value">{n_cierres}</div><div class="kpi-card-icon">✔️</div></div>
 <div class="kpi-card"><div class="kpi-label">Conversión</div><div class="kpi-value">{t_conv}%</div><div class="kpi-card-icon">%</div></div>
@@ -623,15 +679,15 @@ def render_region_dashboard(df_region, region_nombre, is_todos=False):
     html_rutas_s1 = build_rutas_html(grupos_s1, total_s1)
     html_tabla_s1 = build_tabla_estado_html(grupos_s1, total_s1)
 
-    # ── PANEL 3 COLUMNAS ──────────────────────────────────────────────────────
-    col1, col2, col3 = st.columns([1, 1, 1])
+    # ── PANEL 2 COLUMNAS ──────────────────────────────────────────────────────
+    col1, col2 = st.columns([1, 1])
 
     with col1:
         st.markdown("""<div class="dashboard-panel">
 <div class="panel-title">Distribución General</div>
 <div class="panel-subtitle">Visitas físicas (Prospección + Mantenimiento)</div>""", unsafe_allow_html=True)
         if html_rutas_s1:
-            st.markdown(f'<div class="rutas-container">{html_rutas_s1}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="rutas-container" style="margin-top:14px;">{html_rutas_s1}</div>', unsafe_allow_html=True)
         else:
             st.markdown("<p style='opacity:0.6;font-size:13px;'>Sin registros.</p>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
@@ -641,13 +697,6 @@ def render_region_dashboard(df_region, region_nombre, is_todos=False):
 <div class="panel-title">Conversiones</div>
 <div class="panel-subtitle">% de cierres / prospectos por Zona</div>
 <div class="conv-list">{html_convs}</div>
-</div>""", unsafe_allow_html=True)
-
-    with col3:
-        st.markdown(f"""<div class="dashboard-panel">
-<div class="panel-title">Detalle por Zona</div>
-<div class="panel-subtitle">Visitas, participación y estado</div>
-{html_tabla_s1}
 </div>""", unsafe_allow_html=True)
 
     st.markdown("<div style='margin-top:30px;'></div>", unsafe_allow_html=True)
@@ -669,183 +718,167 @@ def render_region_dashboard(df_region, region_nombre, is_todos=False):
         gradient="linear-gradient(135deg,#065f46 0%,#10b981 100%)"
     )
 
-    st.markdown("""<div class="dashboard-panel" style="margin-bottom:15px;">
-<div class="panel-title">Distribución de Visitas por Zona</div>
-<div class="panel-subtitle">Solo Mantenimiento · Tipo Visita = Física</div>""", unsafe_allow_html=True)
-
     if not grupos_mant.empty:
-        fig = go.Figure(go.Bar(
-            x=grupos_mant[COL_ZONA],
-            y=grupos_mant["Visitas"],
-            marker_color=[PALETA_RUTAS[i % len(PALETA_RUTAS)] for i in range(len(grupos_mant))],
-            text=grupos_mant["Visitas"],
-            textposition="outside",
-            cliponaxis=False,
-        ))
-        fig.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            margin=dict(t=30, b=10, l=10, r=10),
-            xaxis=dict(showgrid=False),
-            yaxis=dict(showgrid=True, gridcolor="rgba(128,128,128,0.2)"),
-            height=320,
-        )
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-        html_rutas_mant = build_rutas_html(grupos_mant, total_mant)
-        st.markdown(f'<div class="rutas-container" style="margin-top:10px;">{html_rutas_mant}</div>', unsafe_allow_html=True)
+        html_tabla_mant = build_tabla_estado_html(grupos_mant, total_mant)
+        col_graf, col_det = st.columns([3, 2])
+
+        with col_graf:
+            st.markdown("""
+<div class="dashboard-panel" style="margin-bottom:15px;">
+<div class="panel-title">Distribución de Visitas por Zona</div>
+<div class="panel-subtitle">Solo Mantenimiento · Tipo Visita = Física</div>
+</div>""", unsafe_allow_html=True)
+            fig = go.Figure(go.Bar(
+                x=grupos_mant[COL_ZONA],
+                y=grupos_mant["Visitas"],
+                marker_color=[PALETA_RUTAS[i % len(PALETA_RUTAS)] for i in range(len(grupos_mant))],
+                text=grupos_mant["Visitas"],
+                textposition="outside",
+                cliponaxis=False,
+            ))
+            fig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                margin=dict(t=10, b=10, l=10, r=10),
+                xaxis=dict(showgrid=False),
+                yaxis=dict(showgrid=True, gridcolor="rgba(128,128,128,0.2)"),
+                height=320,
+            )
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            html_rutas_mant = build_rutas_html(grupos_mant, total_mant)
+            st.markdown(f'<div class="rutas-container" style="margin-top:10px;">{html_rutas_mant}</div>', unsafe_allow_html=True)
+
+        with col_det:
+            st.markdown(f"""
+<div class="dashboard-panel" style="margin-bottom:15px;">
+<div class="panel-title" style="margin-bottom:6px;">Detalle por Zona</div>
+<div class="panel-subtitle" style="margin-bottom:10px;">Visitas, participación y estado · Prospección + Mantenimiento</div>
+{html_tabla_s1}
+</div>""", unsafe_allow_html=True)
     else:
         st.info("Sin registros de Mantenimiento físico para este periodo.")
 
-    st.markdown("</div>", unsafe_allow_html=True)
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# SECCIÓN: CONVERSIÓN PROSPECTOS → CIERRE
+# SECCIÓN: VISITAS POR ZONA - PROSPECCIÓN
 # ═══════════════════════════════════════════════════════════════════════════════
 def render_conversion_section(df_region, region_nombre):
-    """Sección Conversión: Prospectos → Cierre (solo Tipo = PROSPECCIÓN)."""
-    import plotly.graph_objects as go
+    """Sección Visitas por Zona - Prospección (solo Tipo = PROSPECCIÓN, Tipo Visita = FÍSICA)."""
 
-    # Filtrar solo PROSPECCIÓN
-    df_pros = df_region[df_region[COL_TIPO].str.upper().isin(["PROSPECCIÓN", "PROSPECCION"])]
-    if df_pros.empty:
+    # Filtrar: PROSPECCIÓN + FÍSICA
+    df_pros_fis = df_region[
+        df_region[COL_TIPO].str.upper().isin(["PROSPECCIÓN", "PROSPECCION"]) &
+        df_region.get(COL_TIPO_VIS, pd.Series(dtype=str)).str.upper().isin(["FÍSICA", "FISICA"])
+    ]
+    if df_pros_fis.empty:
         return
 
-    # ── Cálculo por Zona ──────────────────────────────────────────────────────
-    orden_etapa = {e: i for i, e in enumerate(ETAPAS_EMBUDO)}
-    zonas = sorted(df_pros[COL_ZONA].dropna().unique().tolist())
+    grupos_pros = (df_pros_fis.groupby(COL_ZONA).size()
+                   .reset_index(name="Visitas")
+                   .sort_values("Visitas", ascending=False)
+                   .reset_index(drop=True))
+    total_pros = grupos_pros["Visitas"].sum()
 
-    zona_stats = []
-    for i, z in enumerate(zonas):
-        df_z = df_pros[df_pros[COL_ZONA] == z]
-        n_pros = df_z[COL_CLIENTE].nunique()
-        if n_pros == 0:
-            continue
-        n_cierres = 0
-        if COL_MOTIVO in df_z.columns:
-            valid = df_z[df_z[COL_MOTIVO].str.upper().isin([e.upper() for e in ETAPAS_EMBUDO])].copy()
-            if not valid.empty:
-                valid["_ord"] = valid[COL_MOTIVO].str.upper().map(orden_etapa)
-                ultima = valid.sort_values("_ord").groupby(COL_CLIENTE).last()[[COL_MOTIVO]].reset_index()
-                n_cierres = ultima[ultima[COL_MOTIVO].str.upper() == "CIERRE"].shape[0]
-        tasa = round(n_cierres / n_pros * 100, 1)
-        zona_stats.append({"zona": z, "prospectos": n_pros, "cierres": n_cierres,
-                           "tasa": tasa, "color": PALETA_RUTAS[i % len(PALETA_RUTAS)]})
+    st.markdown('<div style="margin-top:30px;"></div>', unsafe_allow_html=True)
+    seccion_header(
+        "🔍", "Visitas por Zona - Prospección",
+        f"Distribución de visitas de prospección física por Zona · {region_nombre}",
+        f"Total: {total_pros} visitas físicas",
+        gradient="linear-gradient(135deg,#4c1d95 0%,#7c3aed 100%)"
+    )
 
-    if not zona_stats:
-        return
+    html_tabla_pros = build_tabla_estado_html(grupos_pros, total_pros)
+    col_graf, col_det = st.columns([3, 2])
 
-    zona_stats_sorted = sorted(zona_stats, key=lambda x: x["tasa"], reverse=True)
-
-    # ── KPIs globales ─────────────────────────────────────────────────────────
-    total_pros_gbl   = df_pros[COL_CLIENTE].nunique()
-    total_cierres_gbl = sum(z["cierres"] for z in zona_stats)
-    tasa_global = round(total_cierres_gbl / total_pros_gbl * 100, 2) if total_pros_gbl > 0 else 0.0
-
-    # ── Cabecera ──────────────────────────────────────────────────────────────
-    bg_conv = "linear-gradient(135deg,#4c1d95 0%,#7c3aed 100%)"
-    st.markdown(f"""
-<div class="section-header" style="background:{bg_conv};margin-top:30px;">
-<div>
-<div class="section-header-title">📈 Conversión: Prospectos → Cierre</div>
-<div class="section-header-sub">Tasa de conversión por Zona · Solo Prospección · {region_nombre}</div>
-</div>
-<div class="section-header-right">Total: {total_cierres_gbl} cierres de {total_pros_gbl} prospectos</div>
-</div>""", unsafe_allow_html=True)
-
-    col_chart, col_alerts = st.columns([2, 1])
-
-    # ── Gráfico de barras horizontales ────────────────────────────────────────
-    with col_chart:
-        # Título dentro del panel como bloque HTML cerrado
+    with col_graf:
         st.markdown("""
-<div class="dashboard-panel" style="margin-top:12px;padding-bottom:4px;">
-<div class="panel-title">Tasa de Conversión por Zona</div>
-<div class="panel-subtitle">% de cierres sobre prospectos únicos trabajados</div>
+<div class="dashboard-panel" style="margin-bottom:15px;">
+<div class="panel-title">Distribución de Visitas por Zona</div>
+<div class="panel-subtitle">Solo Prospección · Tipo Visita = Física</div>
 </div>""", unsafe_allow_html=True)
 
-        max_tasa = max((z["tasa"] for z in zona_stats_sorted), default=1)
+        max_vis = int(grupos_pros["Visitas"].max()) if not grupos_pros.empty else 1
         fig = go.Figure(go.Bar(
-            x=[z["tasa"] for z in zona_stats_sorted],
-            y=[z["zona"] for z in zona_stats_sorted],
+            x=grupos_pros["Visitas"],
+            y=grupos_pros[COL_ZONA],
             orientation="h",
-            marker_color=[z["color"] for z in zona_stats_sorted],
-            text=[f"{z['tasa']}%" for z in zona_stats_sorted],
+            marker_color=[PALETA_RUTAS[i % len(PALETA_RUTAS)] for i in range(len(grupos_pros))],
+            text=grupos_pros["Visitas"],
             textposition="outside",
             cliponaxis=False,
         ))
         fig.update_layout(
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
-            margin=dict(t=10, b=10, l=10, r=50),
+            margin=dict(t=10, b=10, l=10, r=40),
             xaxis=dict(showgrid=True, gridcolor="rgba(128,128,128,0.15)",
-                       range=[0, max_tasa * 1.25 + 5],
-                       ticksuffix="%"),
+                       range=[0, max_vis * 1.2]),
             yaxis=dict(showgrid=False, autorange="reversed"),
-            height=max(220, len(zona_stats_sorted) * 44),
+            height=max(220, len(grupos_pros) * 44),
         )
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-        # Tarjetas estilo ruta-card
-        cards_html = ""
-        for z in zona_stats_sorted:
-            color = z["color"]
-            pct   = z["tasa"]
-            bar_w = min(pct, 100)
-            cards_html += f"""
-<div class="ruta-card">
-<div class="ruta-header">
-  <span class="ruta-name">{z['zona']}</span>
-  <span class="ruta-value" style="color:{color};">{pct}%</span>
-</div>
-<div class="ruta-progress-container">
-  <div class="ruta-progress-bar">
-    <div class="ruta-progress-fill" style="width:{bar_w}%;background:{color};"></div>
-  </div>
-  <span class="ruta-pct" style="opacity:0.55;">{z['cierres']}/{z['prospectos']}</span>
-</div>
-</div>"""
-        st.markdown(f'<div class="rutas-container">{cards_html}</div>', unsafe_allow_html=True)
+        html_rutas_pros = build_rutas_html(grupos_pros, total_pros)
+        st.markdown(f'<div class="rutas-container" style="margin-top:10px;">{html_rutas_pros}</div>',
+                    unsafe_allow_html=True)
 
-    # ── Panel Alertas & Observaciones ─────────────────────────────────────────
-    with col_alerts:
-        sin_cierre  = [z for z in zona_stats if z["tasa"] == 0]
-        top_zona    = zona_stats_sorted[0] if zona_stats_sorted else None
+    # ── Panel Alertas & Observaciones (conversión) ──────────────────────────────
+    with col_det:
+        # Calcular tasas de conversión por zona para las alertas
+        df_pros_all = df_region[df_region[COL_TIPO].str.upper().isin(["PROSPECCIÓN", "PROSPECCION"])]
+        orden_etapa = {e: i for i, e in enumerate(ETAPAS_EMBUDO)}
+        zona_stats = []
+        for i, z in enumerate(grupos_pros[COL_ZONA].tolist()):
+            df_z = df_pros_all[df_pros_all[COL_ZONA] == z]
+            n_pros = df_z[COL_CLIENTE].nunique()
+            if n_pros == 0:
+                continue
+            n_cierres = 0
+            if COL_MOTIVO in df_z.columns:
+                valid = df_z[df_z[COL_MOTIVO].str.upper().isin([e.upper() for e in ETAPAS_EMBUDO])].copy()
+                if not valid.empty:
+                    valid["_ord"] = valid[COL_MOTIVO].str.upper().map(orden_etapa)
+                    ultima = valid.sort_values("_ord").groupby(COL_CLIENTE).last()[[COL_MOTIVO]].reset_index()
+                    n_cierres = ultima[ultima[COL_MOTIVO].str.upper() == "CIERRE"].shape[0]
+            tasa = round(n_cierres / n_pros * 100, 1)
+            zona_stats.append({"zona": z, "prospectos": n_pros, "cierres": n_cierres, "tasa": tasa})
+
+        total_pros_gbl    = df_pros_all[COL_CLIENTE].nunique()
+        total_cierres_gbl = sum(z["cierres"] for z in zona_stats)
+        tasa_global = round(total_cierres_gbl / total_pros_gbl * 100, 2) if total_pros_gbl > 0 else 0.0
+
+        sin_cierre = [z for z in zona_stats if z["tasa"] == 0 and z["prospectos"] > 0]
+        top_zona   = max(zona_stats, key=lambda z: z["tasa"]) if zona_stats else None
 
         alertas_html = ""
-
         if sin_cierre:
             for z in sin_cierre:
                 alertas_html += f"""
 <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;
             background:rgba(239,68,68,0.08);border-left:3px solid #ef4444;
             border-radius:6px;margin-bottom:8px;">
-<span style="font-size:16px;">⚠️</span>
+<span style="font-size:16px;">&#9888;</span>
 <div style="font-size:12px;">
 <strong style="color:#ef4444;">{z['zona']}:</strong><br>
 {z['prospectos']} prospectos, 0 cierres (0%)
-</div>
-</div>"""
-
+</div></div>"""
         if top_zona and top_zona["tasa"] > 0:
             alertas_html += f"""
 <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;
             background:rgba(16,185,129,0.08);border-left:3px solid #10b981;
             border-radius:6px;margin-bottom:8px;">
-<span style="font-size:16px;">✅</span>
+<span style="font-size:16px;">&#10003;</span>
 <div style="font-size:12px;">
 <strong style="color:#10b981;">{top_zona['zona']}:</strong> Mayor conversión ({top_zona['tasa']}%)<br>
 {top_zona['cierres']} cierres de {top_zona['prospectos']} prospectos
-</div>
-</div>"""
-
+</div></div>"""
         if not alertas_html:
             alertas_html = "<span style='font-size:13px;opacity:0.6;'>Sin alertas en este periodo.</span>"
 
         st.markdown(f"""
-<div class="dashboard-panel" style="margin-top:12px;">
+<div class="dashboard-panel" style="margin-bottom:15px;">
 <div class="panel-title">Alertas y Observaciones</div>
-<div class="panel-subtitle">Análisis de conversión</div>
+<div class="panel-subtitle">Análisis de conversión por Zona</div>
 {alertas_html}
 <div style="margin-top:18px;padding-top:14px;border-top:1px solid rgba(128,128,128,0.2);
             display:flex;justify-content:space-between;align-items:center;">
@@ -1034,6 +1067,162 @@ def render_visitas_diarias_section(df, modo):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# SECCIÓN: INDICADORES DE PROSPECCIÓN Y MANTENIMIENTO
+# ═══════════════════════════════════════════════════════════════════════════════
+def render_indicadores_giro_section(df, region_nombre):
+    """Sección Indicadores de Prospección y Mantenimiento: distribución y efectividad por giro."""
+    if COL_TIPO_CLI not in df.columns:
+        return
+    if df.empty:
+        return
+
+    orden_etapa = {e: i for i, e in enumerate(ETAPAS_EMBUDO)}
+
+    # ── Cabecera ───────────────────────────────────────────────────────────
+    st.markdown('<div style="margin-top:30px;"></div>', unsafe_allow_html=True)
+    seccion_header(
+        "📈", "Indicadores de Prospección y Mantenimiento",
+        f"Análisis por tipo de cliente (giro) · {region_nombre}",
+        f"{df[COL_TIPO_CLI].nunique()} giros registrados",
+        gradient="linear-gradient(135deg,#0f172a 0%,#1e40af 100%)"
+    )
+
+    # ── Datos por giro ─────────────────────────────────────────────────────────
+    giros = sorted(df[COL_TIPO_CLI].dropna().unique().tolist())
+    # Prospección: solo para cálculo conversion
+    df_pros_gbl = df[df[COL_TIPO].str.upper().isin(["PROSPECCIÓN", "PROSPECCION"])]
+    # Motivo TOMAR PEDIDO
+    MOTIVO_TP = "TOMAR PEDIDO"
+
+    giro_data = []  # dict por giro con todos los stats
+    for i, g in enumerate(giros):
+        df_g = df[df[COL_TIPO_CLI] == g]
+        vis_total  = len(df_g)
+        clientes_u = df_g[COL_CLIENTE].nunique()
+        # Prospectos únicos (solo Prospección)
+        df_g_pros = df_pros_gbl[df_pros_gbl[COL_TIPO_CLI] == g]
+        prospectos_u = df_g_pros[COL_CLIENTE].nunique()
+        # Cierres
+        n_cierres = 0
+        if COL_MOTIVO in df_g_pros.columns and not df_g_pros.empty:
+            valid = df_g_pros[df_g_pros[COL_MOTIVO].str.upper().isin([e.upper() for e in ETAPAS_EMBUDO])].copy()
+            if not valid.empty:
+                valid["_ord"] = valid[COL_MOTIVO].str.upper().map(orden_etapa)
+                ultima = valid.sort_values("_ord").groupby(COL_CLIENTE).last()[[COL_MOTIVO]].reset_index()
+                n_cierres = ultima[ultima[COL_MOTIVO].str.upper() == "CIERRE"].shape[0]
+        tasa_conv = round(n_cierres / prospectos_u * 100, 1) if prospectos_u > 0 else 0.0
+        # Visitas de PROSPECCIÓN para la dona
+        visitas_pros = len(df_g_pros)
+        # Visitas de MANTENIMIENTO para efectividad
+        df_g_mant = df[df[COL_TIPO_CLI] == g]
+        df_g_mant = df_g_mant[df_g_mant[COL_TIPO].str.upper() == "MANTENIMIENTO"]
+        vis_mant     = len(df_g_mant)
+        clientes_mant = df_g_mant[COL_CLIENTE].nunique()
+        if COL_MOTIVO in df_g_mant.columns and vis_mant > 0:
+            n_tp = df_g_mant[df_g_mant[COL_MOTIVO].str.upper() == MOTIVO_TP].shape[0]
+        else:
+            n_tp = 0
+        efect = round(n_tp / vis_mant * 100, 1) if vis_mant > 0 else 0.0
+        giro_data.append({
+            "giro": g, "visitas": vis_total, "visitas_pros": visitas_pros,
+            "visitas_mant": vis_mant, "clientes_mant": clientes_mant,
+            "clientes_u": clientes_u,
+            "prospectos_u": prospectos_u, "cierres": n_cierres,
+            "tasa_conv": tasa_conv, "tomar_pedido": n_tp, "efect": efect,
+            "color": PALETA_RUTAS[i % len(PALETA_RUTAS)]
+        })
+
+    total_vis = sum(g["visitas"] for g in giro_data)
+    total_pros_dona = sum(g["visitas_pros"] for g in giro_data)
+    if not giro_data or total_vis == 0:
+        st.info("Sin datos para mostrar indicadores por giro.")
+        return
+
+    col_dona, col_efect = st.columns([1, 1])
+
+    # ── Indicador 1: Distribución por tipo de cliente (dona) ────────────────
+    with col_dona:
+        st.markdown("""
+<div class="dashboard-panel" style="margin-bottom:15px;">
+<div class="panel-title">Distribución por Tipo de Cliente</div>
+<div class="panel-subtitle">Visitas de Prospección por giro de cliente</div>
+</div>""", unsafe_allow_html=True)
+
+        fig_dona = go.Figure(go.Pie(
+            labels=[g["giro"] for g in giro_data],
+            values=[g["visitas_pros"] for g in giro_data],
+            hole=0.52,
+            marker_colors=[g["color"] for g in giro_data],
+            textinfo="label+percent",
+            hovertemplate="%{label}: %{value} visitas (%{percent})<extra></extra>",
+        ))
+        fig_dona.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            margin=dict(t=10, b=130, l=10, r=10),
+            height=420,
+            legend=dict(orientation="h", yanchor="bottom", y=-0.38, xanchor="center", x=0.5),
+            showlegend=True,
+        )
+        st.plotly_chart(fig_dona, use_container_width=True, config={"displayModeBar": False})
+
+        # Tarjetas por giro: visitas prospección | prospectos únicos | cierres | tasa
+        cards_giro = ""
+        for g in sorted(giro_data, key=lambda x: x["visitas_pros"], reverse=True):
+            color = g["color"]
+            bar_w = round(g["visitas_pros"] / total_pros_dona * 100) if total_pros_dona > 0 else 0
+            cards_giro += f"""
+<div class="ruta-card">
+<div class="ruta-header">
+  <span class="ruta-name">{g['giro']}</span>
+  <span class="ruta-value" style="color:{color};">{g['visitas_pros']}</span>
+</div>
+<div class="ruta-progress-container">
+  <div class="ruta-progress-bar">
+    <div class="ruta-progress-fill" style="width:{bar_w}%;background:{color};"></div>
+  </div>
+</div>
+<div style="display:flex;gap:16px;margin-top:6px;font-size:11px;opacity:0.75;">
+  <span>&#128100; {g['prospectos_u']} prospec.</span>
+  <span>&#9989; {g['cierres']} cierres</span>
+  <span>&#128200; {g['tasa_conv']}% conv.</span>
+</div>
+</div>"""
+        st.markdown(f'<div class="rutas-container" style="margin-top:12px;">{cards_giro}</div>',
+                    unsafe_allow_html=True)
+
+    # ── Indicador 2: Efectividad por giro de cartera ──────────────────────
+    with col_efect:
+        st.markdown("""
+<div class="dashboard-panel" style="margin-bottom:15px;">
+<div class="panel-title">Efectividad por Giro de Cartera</div>
+<div class="panel-subtitle">Tomar Pedido sobre visitas de Mantenimiento por giro</div>
+</div>""", unsafe_allow_html=True)
+
+        giro_efect_sorted = sorted(giro_data, key=lambda x: x["efect"], reverse=True)
+        for g in giro_efect_sorted:
+            color  = g["color"]
+            efect  = g["efect"]
+            bar_w  = min(efect, 100)
+            st.markdown(f"""
+<div class="ruta-card" style="margin-bottom:10px;">
+<div class="ruta-header">
+  <span class="ruta-name" style="font-size:14px;font-weight:700;">{g['giro']}</span>
+  <span class="ruta-value" style="color:{color};font-size:16px;">{efect}%</span>
+</div>
+<div class="ruta-progress-container">
+  <div class="ruta-progress-bar">
+    <div class="ruta-progress-fill" style="width:{bar_w}%;background:{color};"></div>
+  </div>
+</div>
+<div style="display:flex;gap:18px;margin-top:8px;font-size:11px;opacity:0.75;">
+  <span>&#128200; {g['visitas_mant']} vis. mant.</span>
+  <span>&#128100; {g['clientes_mant']} clientes</span>
+  <span>&#128722; {g['tomar_pedido']} Tomar Pedido</span>
+</div>
+</div>""", unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # PESTAÑAS
 # ═══════════════════════════════════════════════════════════════════════════════
 tab_todos, tab_prov, tab_lima = st.tabs(["🌎 Todos", "🏞️ Provincia", "🏙️ Lima"])
@@ -1044,6 +1233,7 @@ with tab_todos:
     else:
         render_region_dashboard(dff, "Todos", is_todos=True)
         render_visitas_diarias_section(dff, modo_fecha)
+        render_indicadores_giro_section(dff, "Todos")
 
 with tab_prov:
     if COL_REGION in dff.columns:
@@ -1053,6 +1243,7 @@ with tab_prov:
         else:
             render_region_dashboard(df_prov, "Provincia")
         render_conversion_section(df_prov, "Provincia")
+        render_indicadores_giro_section(df_prov, "Provincia")
     else:
         st.warning("Falta la columna Región.")
 
@@ -1064,6 +1255,7 @@ with tab_lima:
         else:
             render_region_dashboard(df_lim, "Lima")
         render_conversion_section(df_lim, "Lima")
+        render_indicadores_giro_section(df_lim, "Lima")
     else:
         st.warning("Falta la columna Región.")
 
