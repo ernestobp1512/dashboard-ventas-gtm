@@ -1,1524 +1,2097 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from pathlib import Path
-from pptx import Presentation
+import plotly.express as px
+from datetime import datetime, timedelta
+import io
+import calendar
 
-# ─── CONFIGURACIÓN ─────────────────────────────────────────────────────────────
+# ─── PAGE CONFIG ────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Reporte de Visitas Comerciales",
+    page_title="Go To Market - Dashboard",
     page_icon="📊",
     layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# ─── ESTILOS ───────────────────────────────────────────────────────────────────
+# ─── CUSTOM CSS (IDENTIDAD GTM + ESTILIZACIÓN) ──────────────────────────────
 st.markdown("""
 <style>
-    .kpi-container {
-        display: flex;
-        justify-content: space-between;
-        gap: 20px;
-        margin-top: 10px;
-        margin-bottom: 25px;
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+    .main { background-color: #F8FAFC; }
+    
+    .stSelectbox label p, .stMultiSelect label p {
+        font-weight: bold !important;
+        color: #1E293B !important;
+        font-size: 14px !important;
     }
+
+    .header-container {
+        display: flex; align-items: center; justify-content: space-between;
+        background: white; padding: 25px 35px; border-radius: 15px;
+        margin-bottom: 25px; border: 1px solid #E2E8F0;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+    }
+
+    .logo-bars {
+        display: flex; align-items: flex-end; gap: 6px; margin-right: 25px;
+    }
+    .bar-small { width: 14px; height: 25px; background-color: #334155; border-radius: 2px; }
+    .bar-med { width: 14px; height: 45px; background-color: #334155; border-radius: 2px; }
+    .bar-large { width: 14px; height: 60px; background-color: #334155; border-radius: 2px; }
+
+    .header-text h1 { 
+        color: #0F172A; font-size: 52px; font-weight: 900; margin: 0; 
+        line-height: 1; letter-spacing: -2px;
+    }
+    .brand-sub { 
+        font-size: 24px; font-weight: 800; color: #0F172A; margin-top: 5px; 
+    }
+    .red-span { color: #DC2626; }
+
     .kpi-card {
-        flex: 1;
-        background-color: var(--secondary-background-color) !important;
-        border-radius: 8px;
-        padding: 24px 20px;
-        border-left: 4px solid #1c64f2; 
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-        color: var(--text-color) !important;
-        position: relative;
+        background: white; border-radius: 12px; padding: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.04); border: 1px solid #E2E8F0;
+        border-left: 6px solid #DC2626; height: 100%;
     }
-    .kpi-card-icon {
-        position: absolute;
-        top: 20px;
-        right: 20px;
-        width: 36px;
-        height: 36px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 18px;
-    }
-    .kpi-card:nth-child(1) { border-left-color: #3b82f6; }
-    .kpi-card:nth-child(1) .kpi-card-icon { background-color: #dbeafe; color: #1d4ed8; }
-    .kpi-card:nth-child(2) { border-left-color: #10b981; }
-    .kpi-card:nth-child(2) .kpi-card-icon { background-color: #d1fae5; color: #047857; }
-    .kpi-card:nth-child(3) { border-left-color: #f59e0b; }
-    .kpi-card:nth-child(3) .kpi-card-icon { background-color: #fef3c7; color: #b45309; }
-    .kpi-card:nth-child(4) { border-left-color: #8b5cf6; }
-    .kpi-card:nth-child(4) .kpi-card-icon { background-color: #ede9fe; color: #6d28d9; }
-    .kpi-value {
-        font-size: 32px;
-        font-weight: 800;
+    .kpi-label { font-size: 11px; color: #64748B; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+    .kpi-value { font-size: 30px; font-weight: 700; color: #1E293B; margin-top: 5px; }
+    .kpi-card.green { border-left-color: #16A34A; }
+    .kpi-card.green .kpi-value { color: #16A34A; }
+    
+    .kpi-desglose {
+        font-size: 13px;
         margin-top: 10px;
-        margin-bottom: 5px;
-        color: #1e3a8a;
+        padding-top: 8px;
+        border-top: 1px solid #E2E8F0;
+        color: #1E293B;
+        font-weight: 500;
     }
-    .kpi-label { font-size: 14px; opacity: 0.7; }
-
-    .dashboard-panel {
-        background-color: var(--secondary-background-color) !important;
-        border-radius: 12px;
-        padding: 24px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-        color: var(--text-color) !important;
-        border: 1px solid rgba(128,128,128,0.2);
-        height: 100%;
-    }
-    .panel-title { font-size: 18px; font-weight: 700; color: #1e3a8a; margin-bottom: 4px; }
-    .panel-subtitle { font-size: 13px; opacity: 0.6; margin-bottom: 20px; }
-
-    .rutas-container { display: flex; flex-wrap: wrap; gap: 15px; }
-    .ruta-card {
-        flex: 1 1 calc(50% - 15px);
-        min-width: 130px;
-        border: 1px solid rgba(128,128,128,0.2);
-        border-radius: 10px;
-        padding: 15px;
-    }
-    .ruta-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-    .ruta-name { font-size: 13px; opacity: 0.8; }
-    .ruta-value { font-weight: 700; font-size: 15px; color: #1e3a8a; }
-    .ruta-progress-container { display: flex; align-items: center; gap: 10px; }
-    .ruta-progress-bar {
-        flex-grow: 1;
-        background-color: rgba(128,128,128,0.2);
-        height: 6px;
-        border-radius: 3px;
-        overflow: hidden;
-    }
-    .ruta-progress-fill { height: 100%; border-radius: 3px; }
-    .ruta-pct { font-size: 12px; opacity: 0.6; min-width: 40px; text-align: right; }
-
-    .conv-list { display: flex; flex-direction: column; gap: 16px; }
-    .conv-item { display: flex; justify-content: space-between; align-items: center; }
-    .conv-item-left { display: flex; align-items: center; gap: 10px; }
-    .conv-dot { width: 8px; height: 8px; border-radius: 50%; }
-    .conv-name { font-size: 14px; }
-    .conv-value { font-weight: 700; font-size: 14px; }
-
-    .styled-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    .styled-table thead tr {
-        border-bottom: 2px solid rgba(128,128,128,0.2);
-        color: #1e3a8a;
-        text-align: left;
-    }
-    .styled-table th, .styled-table td { padding: 10px 8px; }
-    .styled-table tbody tr { border-bottom: 1px solid rgba(128,128,128,0.1); }
-    .styled-table tbody tr:last-of-type { border-bottom: none; }
-
-    .section-header {
-        border-radius: 8px;
-        padding: 14px 20px;
-        margin-bottom: 16px;
+    
+    .section-title {
+        font-size: 17px; font-weight: 700; color: #1E293B;
+        margin: 25px 0 15px; padding-bottom: 8px;
+        border-bottom: 2px solid #F1F5F9;
         display: flex;
         justify-content: space-between;
         align-items: center;
+    }
+    
+    .zona-badge {
+        background-color: #DC2626;
+        border-radius: 25px;
+        padding: 8px 20px;
+        font-size: 14px;
+        font-weight: 600;
         color: white;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
-    .section-header-title {
-        font-size: 19px;
+    
+    .alerta-mensaje {
+        border-radius: 12px;
+        padding: 15px;
+        margin: 15px 0;
+        border-left: 5px solid;
+        font-size: 13px;
+        line-height: 1.4;
+    }
+    .alerta-mensaje.alerta {
+        background-color: #FEE2E2;
+        border-left-color: #DC2626;
+    }
+    .alerta-mensaje.recomendacion {
+        background-color: #DCFCE7;
+        border-left-color: #16A34A;
+    }
+    
+    .ranking-header {
+        background: white;
+        padding: 20px 25px;
+        border-radius: 15px;
+        margin-bottom: 25px;
+        border: 1px solid #E2E8F0;
+    }
+    .ranking-title {
+        font-size: 24px;
         font-weight: 800;
-        display: flex;
-        align-items: center;
-        gap: 10px;
+        color: #0F172A;
+        margin-bottom: 5px;
     }
-    .section-header-sub { font-size: 13px; opacity: 0.85; margin-top: 3px; }
-    .section-header-right { font-size: 13px; font-weight: 600; text-align: right; }
-
-    .header-title-container-main { text-align: center; margin-top: 10px; margin-bottom: 15px; }
-    .header-title { color: #1e3a8a; font-size: 38px; font-weight: 800; margin-bottom: 5px; }
+    .ranking-sub {
+        color: #64748B;
+        font-size: 13px;
+    }
+    
+    /* Estilos para el embudo */
+    .funnel-card {
+        transition: all 0.2s ease;
+        cursor: help;
+    }
+    .funnel-card:hover {
+        transform: translateX(5px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
 </style>
 """, unsafe_allow_html=True)
 
-_theme   = st.get_option("theme.base") or "dark"
-_is_dark = (_theme == "dark")
-
-if _is_dark:
-    st.markdown("""
-    <style>
-        .header-title, .panel-title, .kpi-value, .ruta-value { color: #60a5fa !important; }
-        .styled-table thead tr { color: #60a5fa !important; }
-    </style>
-    """, unsafe_allow_html=True)
-
-# ─── CONSTANTES ────────────────────────────────────────────────────────────────
-EXCEL_FILE = "visitas_ventas.xlsx"
-
-COL_FECHA    = "Date"
-COL_TIPO     = "Tipo"
-COL_TIPO_CLI = "Giro"
-COL_CLIENTE  = "Cliente o Prospecto"
-COL_DISTRITO = "Distrito"
-COL_MOTIVO   = "Task"
-COL_RESULTADO= "Obs"
-COL_ZONA     = "Zona"
-COL_REGION   = "Región"
-COL_TIPO_VIS = "Tipo Visita"
-COL_VENDEDOR = "Vendedor"
-
-ETAPAS_EMBUDO = [
-    "PROSPECCIÓN", "CALIFICACIÓN DE LEADS", "VISITA",
-    "PROPUESTA", "NEGOCIACIÓN", "CIERRE", "NO CIERRE",
-]
-PALETA_RUTAS = ["#3b82f6","#10b981","#f59e0b","#8b5cf6","#ef4444","#0ea5e9","#14b8a6","#f43f5e"]
-
-MESES_ES = {
-    1:"Enero",2:"Febrero",3:"Marzo",4:"Abril",5:"Mayo",6:"Junio",
-    7:"Julio",8:"Agosto",9:"Septiembre",10:"Octubre",11:"Noviembre",12:"Diciembre"
-}
-
-# ─── UTILIDADES DE FECHA ───────────────────────────────────────────────────────
-def mes_a_label(ym_str):
-    """'2025-06' → 'Junio 2025'"""
-    try:
-        anio, mes = ym_str.split("-")
-        return f"{MESES_ES[int(mes)]} {anio}"
-    except Exception:
-        return ym_str
-
-def sem_a_label(sem_str):
-    """'2026-S17' → '2026-04-20 al 2026-04-26'"""
-    try:
-        anio, s = sem_str.split("-S")
-        lunes = pd.Timestamp.fromisocalendar(int(anio), int(s), 1)
-        domingo = lunes + pd.Timedelta(days=6)
-        return f"{lunes.date()} al {domingo.date()}"
-    except Exception:
-        return sem_str
-
-def label_a_semkey(label):
-    """Reverse lookup: '2026-04-20 al 2026-04-26' → '2026-S17'"""
-    # stored in map built at filter time
-    return label
-
-# ─── CARGA DE DATOS ────────────────────────────────────────────────────────────
-@st.cache_data(ttl=300)
-def cargar_datos_completos(ruta):
-    df_log   = pd.read_excel(ruta, sheet_name="Log",   engine="openpyxl")
-    df_users = pd.read_excel(ruta, sheet_name="Users", engine="openpyxl")
-    df_zona  = pd.read_excel(ruta, sheet_name="Zona",  engine="openpyxl")
-
-    for df in [df_log, df_users, df_zona]:
-        df.columns = df.columns.str.strip()
-
-    if "User" in df_log.columns and "Email" in df_users.columns:
-        df_log = df_log.merge(df_users[["Email","Name"]], left_on="User", right_on="Email", how="left")
-        df_log[COL_VENDEDOR] = df_log["Name"].fillna("Desconocido")
-    else:
-        df_log[COL_VENDEDOR] = "Desconocido"
-
-    if "Zona" in df_log.columns and "Zona" in df_zona.columns:
-        df_log = df_log.merge(df_zona[["Zona","Tipo Zona"]], on="Zona", how="left")
-        df_log[COL_REGION] = df_log["Tipo Zona"].fillna("Desconocido")
-    else:
-        df_log[COL_REGION] = "Desconocido"
-
-    df_log[COL_FECHA] = pd.to_datetime(df_log[COL_FECHA], dayfirst=True, errors="coerce")
-    df_log = df_log.dropna(subset=[COL_FECHA])
-
-    iso = df_log[COL_FECHA].dt.isocalendar()
-    df_log["_sem_key"] = iso["year"].astype(str) + "-S" + iso["week"].astype(str).str.zfill(2)
-    df_log["_mes_key"] = df_log[COL_FECHA].dt.strftime("%Y-%m")
-
-    for col in [COL_VENDEDOR,COL_TIPO,COL_TIPO_CLI,COL_CLIENTE,COL_DISTRITO,COL_MOTIVO,COL_TIPO_VIS,COL_REGION,COL_ZONA]:
-        if col in df_log.columns:
-            df_log[col] = df_log[col].astype(str).str.strip()
-
-    try:
-        df_est_sem = pd.read_excel(ruta, sheet_name="Estado_Semana", engine="openpyxl")
-    except Exception:
-        df_est_sem = pd.DataFrame(columns=["Estado","Cantidad"])
-
-    try:
-        df_est_mes = pd.read_excel(ruta, sheet_name="Estado_Mes", engine="openpyxl")
-    except Exception:
-        df_est_mes = pd.DataFrame(columns=["Estado","Cantidad"])
-
-    # ── Limpieza: eliminar filas con campos obligatorios vacíos ──────────────
-    CAMPOS_OBLIGATORIOS = [
-        "Id", "Date", "Time", "Zona", "Cliente o Prospecto",
-        "Tipo", "Task", "User", "Giro", "Departamento",
-        "Provincia", "Distrito", "Tipo Visita", "Id Cliente Prospecto",
-    ]
-    cols_a_validar = [c for c in CAMPOS_OBLIGATORIOS if c in df_log.columns]
-    filas_antes = len(df_log)
-
-    for c in cols_a_validar:
-        try:
-            if df_log[c].dtype == object:
-                # Convertir a str, limpiar espacios, marcar vacíos como NaN
-                df_log[c] = (df_log[c].astype(str).str.strip()
-                             .replace({"nan": None, "None": None,
-                                       "NaT": None, "": None}))
-        except Exception:
-            pass  # columnas numéricas/fecha se dejan para dropna
-
-    df_log = df_log.dropna(subset=cols_a_validar)
-    df_log._filas_descartadas = filas_antes - len(df_log)
-
-    return df_log, df_est_sem, df_est_mes
-
-# ── Selector de archivo ───────────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown("### ⚙️ Configuración")
-    archivo = st.file_uploader("Cargar Excel de visitas", type=["xlsx","xls","xlsm"])
-
-    if archivo is None:
-        st.warning("⚠️ Sube un archivo Excel para comenzar.")
-        st.stop()
-
-    try:
-        df_raw, df_est_sem, df_est_mes = cargar_datos_completos(archivo)
-    except Exception as e:
-        st.error(f"Error al leer el archivo: {e}")
-        st.stop()
-
-    if df_raw.empty:
-        st.error("El archivo está vacío o no tiene filas válidas.")
-        st.stop()
-
-    df_raw = df_raw.sort_values(COL_FECHA)
-
-    st.divider()
-    st.markdown("### 🔽 Filtros")
-
-    vendedores_list = ["Todos"] + sorted(df_raw[COL_VENDEDOR].dropna().unique().tolist())
-    sel_vendedor = st.selectbox("Vendedor", vendedores_list)
-
-    st.markdown("#### Periodo de Filtro")
-    import datetime as _dt
-    _hoy = _dt.date.today()
-    _anio_hoy = str(_hoy.year)
-    _mes_hoy  = _hoy.month
-    _iso      = _hoy.isocalendar()
-    _sem_hoy  = f"{_iso[0]}-S{str(_iso[1]).zfill(2)}"
-    # Inicializar solo en primera carga
-    if "_filtro_inicializado" not in st.session_state:
-        st.session_state["modo_fecha_radio"] = "Semana"
-        st.session_state["anio_ini"] = _anio_hoy
-        st.session_state["mes_ini"]  = _mes_hoy
-        st.session_state["anio_fin"] = _anio_hoy
-        st.session_state["mes_fin"]  = _mes_hoy
-        st.session_state["sem_ini"]  = _sem_hoy
-        st.session_state["sem_fin"]  = _sem_hoy
-        st.session_state["_filtro_inicializado"] = True
-    modo_fecha = st.radio("Agrupar por:", ["Mes", "Semana"], horizontal=True, key="modo_fecha_radio")
-
-    # ── Metadatos de fechas disponibles en el archivo ─────────────────────────
-    mes_keys_disp = sorted(df_raw["_mes_key"].dropna().unique().tolist())
-    anios_disp    = sorted({k[:4] for k in mes_keys_disp})
-    meses_por_anio = {}
-    for k in mes_keys_disp:
-        a, m = k[:4], int(k[5:7])
-        meses_por_anio.setdefault(a, []).append(m)
-
-    sem_keys_disp = sorted(df_raw["_sem_key"].dropna().unique().tolist())
-    sem_por_mes_key = {}
-    for sk in sem_keys_disp:
-        anio_s, s_nro = sk.split("-S")
-        lunes = pd.Timestamp.fromisocalendar(int(anio_s), int(s_nro), 1)
-        mk    = lunes.strftime("%Y-%m")
-        sem_por_mes_key.setdefault(mk, []).append(sk)
-
-    def sem_display(sk):
-        """Texto para los selectboxes: solo rango de fechas con separador visual."""
-        anio_s, s_nro_s = sk.split("-S")
-        lunes   = pd.Timestamp.fromisocalendar(int(anio_s), int(s_nro_s), 1)
-        domingo = lunes + pd.Timedelta(days=6)
-        return f"{lunes.date()}  ──  {domingo.date()}"
-
-    def sem_ini_label_narrativo(sk):
-        """Fecha de inicio de semana para texto narrativo del dashboard."""
-        anio_s, s_nro_s = sk.split("-S")
-        lunes = pd.Timestamp.fromisocalendar(int(anio_s), int(s_nro_s), 1)
-        return str(lunes.date())
-
-    def sem_fin_label_narrativo(sk):
-        """Fecha de fin de semana para texto narrativo del dashboard."""
-        anio_s, s_nro_s = sk.split("-S")
-        lunes   = pd.Timestamp.fromisocalendar(int(anio_s), int(s_nro_s), 1)
-        domingo = lunes + pd.Timedelta(days=6)
-        return str(domingo.date())
-
-    # ── INICIO ────────────────────────────────────────────────────────────────
-    st.markdown("**📅 Inicio**")
-    col_ai, col_mi = st.columns(2)
-    with col_ai:
-        anio_ini = st.selectbox("Año", anios_disp, index=0, key="anio_ini")
-    with col_mi:
-        meses_ini_disp = meses_por_anio.get(anio_ini, [])
-        # Si el año cambió, resetear mes_ini al primero disponible
-        if st.session_state.get("_prev_anio_ini") != anio_ini:
-            st.session_state["mes_ini"] = meses_ini_disp[0] if meses_ini_disp else None
-        mes_ini = st.selectbox(
-            "Mes", meses_ini_disp,
-            format_func=lambda m: MESES_ES[m],
-            key="mes_ini"
-        )
-    ini_mes_key = f"{anio_ini}-{str(mes_ini).zfill(2)}"
-
-    if modo_fecha == "Semana":
-        sems_ini = sem_por_mes_key.get(ini_mes_key, [])
-        if sems_ini:
-            # Si el mes_ini cambió, resetear semana inicio
-            if st.session_state.get("_prev_mes_ini") != mes_ini or st.session_state.get("_prev_anio_ini") != anio_ini:
-                st.session_state["sem_ini"] = sems_ini[0]
-            sem_ini_sk = st.selectbox(
-                "Semana inicio", sems_ini,
-                format_func=sem_display,
-                key="sem_ini"
-            )
-        else:
-            st.caption("Sin semanas registradas en ese mes.")
-            sem_ini_sk = sem_keys_disp[0]
-    else:
-        sem_ini_sk = sem_keys_disp[0]  # valor dummy cuando no aplica
-
-    # ── FIN: auto-setear al inicio sólo cuando el inicio cambia ──────────────
-    # Detectar si el inicio acaba de cambiar en esta ejecución
-    _ini_cambio_anio = st.session_state.get("_prev_anio_ini") != anio_ini
-    _ini_cambio_mes  = st.session_state.get("_prev_mes_ini")  != mes_ini
-    _ini_cambio_sem  = st.session_state.get("_prev_sem_ini")  != sem_ini_sk
-
-    st.markdown("**📅 Fin**")
-    col_af, col_mf = st.columns(2)
-    with col_af:
-        if _ini_cambio_anio:
-            st.session_state["anio_fin"] = anio_ini
-        anio_fin = st.selectbox("Año ", anios_disp, key="anio_fin")
-    with col_mf:
-        meses_fin_disp = meses_por_anio.get(anio_fin, [])
-        # Resetear mes_fin si anio_fin cambió por seguir al inicio, o si mes_ini cambió
-        if _ini_cambio_anio or _ini_cambio_mes:
-            nuevo_mes_fin = mes_ini if mes_ini in meses_fin_disp else (meses_fin_disp[0] if meses_fin_disp else None)
-            st.session_state["mes_fin"] = nuevo_mes_fin
-        # Si el año fin fue cambiado por el usuario y el mes guardado ya no es válido, resetear
-        if st.session_state.get("mes_fin") not in meses_fin_disp and meses_fin_disp:
-            st.session_state["mes_fin"] = meses_fin_disp[0]
-        mes_fin = st.selectbox(
-            "Mes ", meses_fin_disp,
-            format_func=lambda m: MESES_ES[m],
-            key="mes_fin"
-        )
-    fin_mes_key = f"{anio_fin}-{str(mes_fin).zfill(2)}"
-
-    if modo_fecha == "Semana":
-        sems_fin = sem_por_mes_key.get(fin_mes_key, [])
-        if sems_fin:
-            if _ini_cambio_anio or _ini_cambio_mes or _ini_cambio_sem:
-                st.session_state["sem_fin"] = sem_ini_sk if sem_ini_sk in sems_fin else sems_fin[0]
-            if st.session_state.get("sem_fin") not in sems_fin:
-                st.session_state["sem_fin"] = sems_fin[0]
-            sem_fin_sk = st.selectbox(
-                "Semana fin", sems_fin,
-                format_func=sem_display,
-                key="sem_fin"
-            )
-        else:
-            st.caption("Sin semanas registradas en ese mes.")
-            sem_fin_sk = sem_keys_disp[-1]
-    else:
-        sem_fin_sk = sem_keys_disp[-1]  # valor dummy
-
-    # Guardar estado del inicio para detectar cambios en el próximo rerun
-    st.session_state["_prev_anio_ini"] = anio_ini
-    st.session_state["_prev_mes_ini"]  = mes_ini
-    st.session_state["_prev_sem_ini"]  = sem_ini_sk
-
-    # ── Claves y labels finales ────────────────────────────────────────────────
-    if modo_fecha == "Mes":
-        opciones_keys = mes_keys_disp
-        ini_key = ini_mes_key
-        fin_key = fin_mes_key
-        if ini_key > fin_key:
-            ini_key, fin_key = fin_key, ini_key
-        sel_ini_key, sel_fin_key = ini_key, fin_key
-        # Labels para texto narrativo del dashboard
-        sel_ini_label = mes_a_label(ini_key)   # "Junio 2025"
-        sel_fin_label = mes_a_label(fin_key)
-        COL_FILTRO = "_mes_key"
-    else:
-        opciones_keys = sem_keys_disp
-        ini_key = sem_ini_sk
-        fin_key = sem_fin_sk
-        if ini_key > fin_key:
-            ini_key, fin_key = fin_key, ini_key
-        sel_ini_key, sel_fin_key = ini_key, fin_key
-        # Para semanas: etiqueta narrativa = "<lunes ini> y <domingo fin>"
-        sel_ini_label = sem_ini_label_narrativo(ini_key)   # "2026-04-13" (lunes inicio)
-        sel_fin_label = sem_fin_label_narrativo(fin_key)   # "2026-04-26" (domingo fin)
-        COL_FILTRO = "_sem_key"
-
-    st.divider()
-    if st.button("↻ Limpiar caché"):
-        st.cache_data.clear()
-        st.rerun()
-
-
-
-
-# ── Aplicar filtros ────────────────────────────────────────────────────────────
-dff = df_raw.copy()
-if sel_vendedor != "Todos":
-    dff = dff[dff[COL_VENDEDOR] == sel_vendedor]
-
-dff = dff[(dff[COL_FILTRO] >= sel_ini_key) & (dff[COL_FILTRO] <= sel_fin_key)]
-
-# Excluir zona OFICINA de todos los analisis
-if COL_ZONA in dff.columns:
-    dff = dff[dff[COL_ZONA].str.upper() != 'OFICINA']
-
-# Excluir cliente GO TO MARKET de todos los analisis
-if COL_CLIENTE in dff.columns:
-    dff = dff[dff[COL_CLIENTE].str.upper().str.strip() != 'GO TO MARKET']
-
-# num_periodos = cantidad de periodos en el rango
-idx_ini = opciones_keys.index(sel_ini_key)
-idx_fin = opciones_keys.index(sel_fin_key)
-num_periodos = abs(idx_fin - idx_ini) + 1
-
-# ── Etiqueta legible del rango ─────────────────────────────────────────────────
-if modo_fecha == "Mes":
-    if sel_ini_key == sel_fin_key:
-        rango_label = f"en el mes de {sel_ini_label}"
-    else:
-        rango_label = f"entre {sel_ini_label} y {sel_fin_label}"
-else:  # Semana
-    if sel_ini_key == sel_fin_key:
-        # Una sola semana: lunes al domingo
-        rango_label = f"entre {sel_ini_label} y {sel_fin_label}"
-    else:
-        rango_label = f"entre {sel_ini_label} y {sel_fin_label}"
-
-df_estado_usar = df_est_mes if modo_fecha == "Mes" else df_est_sem
-
-with st.sidebar:
-    st.caption(f"**{len(dff):,}** registros · **{num_periodos}** {'meses' if modo_fecha=='Mes' else 'semana(s)'}")
-
-# ─── HEADER PRINCIPAL ─────────────────────────────────────────────────────────
+# ─── HEADER PROFESIONAL ─────────────────────────────────────────────────────
 st.markdown("""
-<div class="header-title-container-main">
-    <div class="header-title">🗺️ Reporte de Visitas Comerciales</div>
+<div class="header-container">
+    <div style="display: flex; align-items: center;">
+        <div class="logo-bars">
+            <div class="bar-small"></div>
+            <div class="bar-med"></div>
+            <div class="bar-large"></div>
+        </div>
+        <div class="header-text">
+            <h1>Go To Market SAC</h1>
+            <div class="brand-sub">go<span class="red-span">to</span>market</div>
+        </div>
+    </div>
+    <div style="text-align: right; color: #64748B; font-size: 12px;">
+        <b>REPORTE EJECUTIVO</b><br>Gestión Comercial 2026
+    </div>
 </div>
 """, unsafe_allow_html=True)
-st.markdown(
-    f"<div style='text-align:center;margin-bottom:2rem;opacity:0.7;font-size:15px;'>"
-    f"Análisis de rutas, conversión y cobertura comercial {rango_label}</div>",
-    unsafe_allow_html=True
-)
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# HELPERS DE CÁLCULO
-# ═══════════════════════════════════════════════════════════════════════════════
-def calc_kpis(df_filtro):
-    if COL_TIPO not in df_filtro.columns:
-        return 0, 0, 0, 0.0
-    df_vis  = df_filtro[
-        df_filtro[COL_TIPO].str.upper().isin(["PROSPECCIÓN","PROSPECCION","MANTENIMIENTO"]) &
-        df_filtro.get(COL_TIPO_VIS, pd.Series(dtype=str)).str.upper().isin(["FÍSICA","FISICA"])
-    ]
-    tot_vis = len(df_vis)
-    df_pros = df_filtro[df_filtro[COL_TIPO].str.upper().isin(["PROSPECCIÓN","PROSPECCION"])]
-    tot_pros = df_pros[COL_CLIENTE].nunique() if not df_pros.empty else 0
-    n_cierres = 0
-    if not df_pros.empty and COL_MOTIVO in df_pros.columns:
-        orden = {e: i for i, e in enumerate(ETAPAS_EMBUDO)}
-        valid = df_pros[df_pros[COL_MOTIVO].str.upper().isin([e.upper() for e in ETAPAS_EMBUDO])].copy()
-        if not valid.empty:
-            valid["_ord"] = valid[COL_MOTIVO].str.upper().map(orden)
-            ultima = valid.sort_values("_ord").groupby(COL_CLIENTE).last()[[COL_MOTIVO]].reset_index()
-            n_cierres = ultima[ultima[COL_MOTIVO].str.upper() == "CIERRE"].shape[0]
-    t_conv = round(n_cierres / tot_pros * 100, 2) if tot_pros > 0 else 0.0
-    return tot_vis, tot_pros, n_cierres, t_conv
+# ─── CONSTANTS ──────────────────────────────────────────────────────────────
+META_SEMANAL = 25
+META_DIARIA = 5
+COL_POSITIONS = {"fecha": 1, "zona": 3, "cliente": 6, "tipo": 8, "giro": 14, "tipo_visita": 20}
 
+# ─── CLASIFICACIÓN DE ZONAS (LIMA vs PROVINCIA) ─────────────────────────────
+CLASIFICACION_ZONAS = {
+    "MAYORISTAS ABARROTES": "LIMA",
+    "LIMA NORTE 1": "LIMA",
+    "SUR CHICO 1": "LIMA",
+    "LIMA SUR 1": "LIMA",
+    "MAYORISTAS": "LIMA",
+    "HUNTER 1": "LIMA",
+    "MAYORISTAS 2": "LIMA",
+    "CENTRO 1": "PROVINCIA",
+    "SUR 1": "PROVINCIA",
+    "NORTE 2": "PROVINCIA",
+    "ORIENTE 1": "PROVINCIA",
+    "SUR 2": "PROVINCIA",
+    "NORTE 1": "PROVINCIA",
+    "NORTE 3": "PROVINCIA",
+    "CENTRO 2": "PROVINCIA",
+    "SUR 3": "PROVINCIA",
+}
 
-def calc_visitas_planificadas(df_region, meta_df, num_p):
-    # Visitas planificadas = umbral_activo x vendedores_activos x num_periodos
-    if COL_VENDEDOR not in df_region.columns:
-        return None
-    df_fis = df_region[
-        df_region[COL_TIPO].str.upper().isin(['PROSPECCION', 'PROSPECCIÓN', 'MANTENIMIENTO']) &
-        df_region.get(COL_TIPO_VIS, pd.Series(dtype=str)).str.upper().isin(['FISICA', 'FÍSICA'])
-    ]
-    vendedores_activos = df_fis[COL_VENDEDOR].nunique()
-    if vendedores_activos == 0:
-        return None
-    if meta_df.empty or 'Cantidad' not in meta_df.columns or 'Estado' not in meta_df.columns:
-        return None
-    meta_cp = meta_df.copy()
-    meta_cp['Cantidad'] = pd.to_numeric(meta_cp['Cantidad'], errors='coerce').fillna(0)
-    fila_activo = meta_cp[meta_cp['Estado'].astype(str).str.upper().str.contains('ACTIVO', na=False)]
-    if fila_activo.empty:
-        return None
-    umbral = int(fila_activo['Cantidad'].iloc[0])
-    return umbral * vendedores_activos * num_p
+# ─── ZONAS ACTIVAS FIJAS ────────────────────────────────────────────────────
+ZONAS_LIMA = ["MAYORISTAS ABARROTES", "LIMA NORTE 1", "SUR CHICO 1", "LIMA SUR 1", "MAYORISTAS", "HUNTER 1", "MAYORISTAS 2"]
+ZONAS_PROVINCIA = ["CENTRO 1", "SUR 1", "NORTE 2", "ORIENTE 1", "SUR 2", "NORTE 1", "NORTE 3", "CENTRO 2", "SUR 3"]
+ZONAS_EXCLUIR = ["BROKER", "NORTE CHICO 1", "OFICINA", "MODERNO", "MARCAS PROPIAS"]
 
+NUM_LIMA = len(ZONAS_LIMA)
+NUM_PROVINCIA = len(ZONAS_PROVINCIA)
+NUM_LIMA = len(ZONAS_LIMA)
+NUM_PROVINCIA = len(ZONAS_PROVINCIA)
 
-def obtener_estado(visitas, meta_df, num_p):
-    if meta_df.empty or "Cantidad" not in meta_df.columns or "Estado" not in meta_df.columns:
-        return "Sin Datos"
-    meta_df = meta_df.copy()
-    meta_df["Cantidad"] = pd.to_numeric(meta_df["Cantidad"], errors="coerce").fillna(0)
-    mdf = meta_df.sort_values("Cantidad", ascending=False)
-    for _, row in mdf.iterrows():
-        if visitas >= row["Cantidad"] * num_p:
-            return str(row["Estado"]).strip()
-    return str(mdf.iloc[-1]["Estado"]).strip()
-
-
-def color_estado(est):
-    eu = str(est).upper()
-    if "ACTIVO" in eu:   return "#10b981"
-    if "REGULAR" in eu:  return "#f59e0b"
-    if "BAJO" in eu:     return "#ef4444"
-    return "var(--text-color)"
-
-
-def build_rutas_html(grupos, total):
-    html = ""
-    for i, row in grupos.iterrows():
-        nombre = row[COL_ZONA]
-        vis    = row["Visitas"]
-        pct    = round(vis / total * 100, 2) if total > 0 else 0
-        color  = PALETA_RUTAS[i % len(PALETA_RUTAS)]
-        html += f"""<div class="ruta-card">
-<div class="ruta-header"><span class="ruta-name">{nombre}</span><span class="ruta-value">{vis}</span></div>
-<div class="ruta-progress-container">
-<div class="ruta-progress-bar"><div class="ruta-progress-fill" style="width:{pct}%;background:{color};"></div></div>
-<span class="ruta-pct">{pct}%</span></div></div>"""
-    return html
-
-
-def build_tabla_estado_html(grupos, total):
-    html = """<table class="styled-table">
-<thead><tr><th>Zona</th><th>Visitas</th><th>%</th><th>Estado</th></tr></thead><tbody>"""
-    for i, row in grupos.iterrows():
-        zona = row[COL_ZONA]
-        vis  = row["Visitas"]
-        pct  = round(vis / total * 100, 2) if total > 0 else 0
-        est  = obtener_estado(vis, df_estado_usar, num_periodos)
-        col  = color_estado(est)
-        html += f"""<tr>
-<td style="font-weight:700;">{zona}</td>
-<td>{vis}</td>
-<td>{pct}%</td>
-<td style="color:{col};font-weight:700;">{est}</td></tr>"""
-    html += "</tbody></table>"
-    return html
-
-
-def seccion_header(icono, titulo, subtitulo, info_derecha, gradient="linear-gradient(135deg,#1d4ed8,#3b82f6)"):
-    st.markdown(f"""
-<div class="section-header" style="background:{gradient};">
-<div>
-<div class="section-header-title">{icono} {titulo}</div>
-<div class="section-header-sub">{subtitulo}</div>
-</div>
-<div class="section-header-right">{info_derecha}</div>
-</div>""", unsafe_allow_html=True)
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# RENDER PRINCIPAL
-# ═══════════════════════════════════════════════════════════════════════════════
-def render_region_dashboard(df_region, region_nombre, is_todos=False):
-    # ── CABECERA + KPIs – siempre primero ─────────────────────────────────────
-    seccion_header(
-        "📊", "Resumen Ejecutivo",
-        f"Análisis de visitas comerciales · {region_nombre} · {rango_label}",
-        f"Actualizado: {sel_fin_label}",
-        gradient="linear-gradient(135deg,#1d4ed8 0%,#3b82f6 100%)"
-    )
-
-    tot_vis, tot_pros, n_cierres, t_conv = calc_kpis(df_region)
-    vis_plan = calc_visitas_planificadas(df_region, df_estado_usar, num_periodos)
-    if vis_plan and vis_plan > 0:
-        tasa_vis = round(tot_vis / vis_plan * 100, 1)
-        vis_kpi_val = f'{tot_vis:,} / {vis_plan:,}'
-        vis_kpi_sub = f'<div style="font-size:13px;color:#10b981;font-weight:700;margin-top:2px;">{tasa_vis}% del planificado</div>'
+# ─── METAS SEGÚN ZONA ────────────────────────────────────────────────────────
+def get_metas_zona(zona):
+    """Retorna (meta_diaria, meta_semanal) según el tipo de zona"""
+    zona_upper = zona.upper().strip()
+    if zona_upper in ["MAYORISTAS", "MAYORISTAS 2"]:
+        return 8, 40  # Mayoristas: 8 visitas/día, 40/semana
     else:
-        vis_kpi_val = str(tot_vis)
-        vis_kpi_sub = ''
-    st.markdown(f"""<div class="kpi-container">
-<div class="kpi-card"><div class="kpi-label">Visitas Totales</div><div class="kpi-value">{vis_kpi_val}</div>{vis_kpi_sub}<div class="kpi-card-icon">👥</div></div>
-<div class="kpi-card"><div class="kpi-label">Prospectos Únicos</div><div class="kpi-value">{tot_pros}</div><div class="kpi-card-icon">👤</div></div>
-<div class="kpi-card"><div class="kpi-label">Cierres</div><div class="kpi-value">{n_cierres}</div><div class="kpi-card-icon">✔️</div></div>
-<div class="kpi-card"><div class="kpi-label">Conversión</div><div class="kpi-value">{t_conv}%</div><div class="kpi-card-icon">%</div></div>
-</div>""", unsafe_allow_html=True)
+        return 5, 25  # Zonas normales: 5 visitas/día, 25/semana
 
-    if is_todos:
-        return
+# ─── FUNCIÓN PARA CONTAR SEMANAS (SÁBADOS) EN UN MES ─────────────────────────
+def contar_semanas_en_mes(mes_str):
+    ...
 
-    if COL_ZONA not in df_region.columns:
-        st.warning("No se cuenta con la columna 'Zona'.")
-        return
+# ─── FUNCIÓN PARA CONTAR SEMANAS (SÁBADOS) EN UN MES ─────────────────────────
+def contar_semanas_en_mes(mes_str):
+    try:
+        fecha = datetime.strptime(mes_str, "%B %Y")
+        año = fecha.year
+        mes = fecha.month
+        cal = calendar.monthcalendar(año, mes)
+        num_sabados = 0
+        for semana in cal:
+            if semana[5] != 0:
+                num_sabados += 1
+        return num_sabados
+    except:
+        return 4
 
-    # ── DATOS SECCIÓN 1 (Prospección + Mantenimiento, Físicas) ────────────────
-    df_fis = df_region[
-        df_region[COL_TIPO].str.upper().isin(["PROSPECCIÓN","PROSPECCION","MANTENIMIENTO"]) &
-        df_region.get(COL_TIPO_VIS, pd.Series(dtype=str)).str.upper().isin(["FÍSICA","FISICA"])
-    ]
-    grupos_s1 = df_fis.groupby(COL_ZONA).size().reset_index(name="Visitas").sort_values("Visitas", ascending=False).reset_index(drop=True)
-    total_s1  = grupos_s1["Visitas"].sum()
+# ─── HELPERS ────────────────────────────────────────────────────────────────
+def obtener_ultimos_3_meses():
+    hoy = datetime.now()
+    meses = []
+    for i in range(3, 0, -1):
+        mes = hoy.month - i
+        año = hoy.year
+        if mes <= 0:
+            mes += 12
+            año -= 1
+        meses.append(f"{datetime(año, mes, 1).strftime('%B')} {año}")
+    return meses
 
-    # ── Conversiones por zona (Prospección) ───────────────────────────────────
-    zonas = df_region[COL_ZONA].dropna().unique()
-    convs = []
-    for i, z in enumerate(zonas):
-        _, p, _, ct = calc_kpis(df_region[df_region[COL_ZONA] == z])
-        if p > 0:
-            convs.append({"zona": z, "tasa": ct, "color": PALETA_RUTAS[i % len(PALETA_RUTAS)]})
-    convs.sort(key=lambda x: x["tasa"], reverse=True)
+def obtener_datos_semana(fecha):
+    lunes = fecha - pd.to_timedelta(fecha.weekday(), unit='D')
+    sabado = lunes + pd.Timedelta(days=5)
+    rango = f"{lunes.strftime('%d/%m')} - {sabado.strftime('%d/%m/%Y')}"
+    return lunes, rango
 
-    html_convs = "".join(f"""<div class="conv-item">
-<div class="conv-item-left"><div class="conv-dot" style="background:{c['color']};"></div><span class="conv-name">{c['zona']}</span></div>
-<span class="conv-value">{c['tasa']}%</span></div>""" for c in convs) or \
-        "<span style='opacity:0.6;font-size:13px;'>Sin datos de prospección suficientes.</span>"
 
-    html_rutas_s1 = build_rutas_html(grupos_s1, total_s1)
-    html_tabla_s1 = build_tabla_estado_html(grupos_s1, total_s1)
-
-    # ── PANEL 2 COLUMNAS ──────────────────────────────────────────────────────
-    col1, col2 = st.columns([1, 1])
-
-    with col1:
-        st.markdown("""<div class="dashboard-panel">
-<div class="panel-title">Distribución General</div>
-<div class="panel-subtitle">Visitas físicas (Prospección + Mantenimiento)</div>""", unsafe_allow_html=True)
-        if html_rutas_s1:
-            st.markdown(f'<div class="rutas-container" style="margin-top:14px;">{html_rutas_s1}</div>', unsafe_allow_html=True)
+# ============================================================
+# FUNCIÓN DE ALERTAS Y RECOMENDACIONES (VERSIÓN CON SEMANA CERRADA)
+# ============================================================
+def generar_alertas_simple(df_zona, nombre_zona, total_visitas, meta_semanal=25):
+    """Genera mensajes de alerta con metas dinámicas según la zona"""
+    
+    if df_zona.empty:
+        return None
+    
+    # Obtener metas según la zona
+    meta_diaria, meta_semanal_zona = get_metas_zona(nombre_zona)
+    
+    hoy = datetime.now()
+    dia_actual_num = hoy.weekday()
+    dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
+    dia_actual_nombre = dias_semana[dia_actual_num] if dia_actual_num < 6 else "Sábado"
+    
+    # META ACUMULADA SEGÚN EL DÍA (con meta_diaria personalizada)
+    if dia_actual_num == 0:  # Lunes
+        meta_acumulada = meta_diaria
+        dias_a_contar = ["Lunes"]
+        es_viernes_o_sabado = False
+    elif dia_actual_num == 1:  # Martes
+        meta_acumulada = meta_diaria * 2
+        dias_a_contar = ["Lunes", "Martes"]
+        es_viernes_o_sabado = False
+    elif dia_actual_num == 2:  # Miércoles
+        meta_acumulada = meta_diaria * 3
+        dias_a_contar = ["Lunes", "Martes", "Miércoles"]
+        es_viernes_o_sabado = False
+    elif dia_actual_num == 3:  # Jueves
+        meta_acumulada = meta_diaria * 4
+        dias_a_contar = ["Lunes", "Martes", "Miércoles", "Jueves"]
+        es_viernes_o_sabado = False
+    else:  # Viernes o Sábado
+        meta_acumulada = meta_semanal_zona
+        dias_a_contar = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
+        es_viernes_o_sabado = True
+    
+    # CALCULAR VISITAS POR DÍA Y ACUMULADAS
+    lunes_actual = hoy - timedelta(days=dia_actual_num)
+    visitas_acumuladas = 0
+    visitas_por_dia = {}
+    
+    for i, dia in enumerate(dias_semana[:dia_actual_num + 1]):
+        fecha_dia = lunes_actual + timedelta(days=i)
+        visitas = len(df_zona[df_zona["fecha"].dt.date == fecha_dia.date()])
+        visitas_por_dia[dia] = visitas
+        if dia in dias_a_contar:
+            visitas_acumuladas += visitas
+    
+    pct_acumulado = (visitas_acumuladas / meta_acumulada * 100) if meta_acumulada > 0 else 0
+    pct_semana = (total_visitas / meta_semanal_zona * 100) if meta_semanal_zona > 0 else 0
+    
+    restantes_acumulado = meta_acumulada - visitas_acumuladas
+    restantes_semana = meta_semanal_zona - total_visitas
+    
+    # IDENTIFICAR DÍAS QUE FALLARON Y DÍAS EXCELENTES
+    dias_fallados = []
+    dias_excelentes = []
+    
+    for dia, visitas in visitas_por_dia.items():
+        if visitas < meta_diaria:
+            if visitas == 0:
+                dias_fallados.append(f"{dia} (0)")
+            else:
+                dias_fallados.append(f"{dia} ({visitas})")
+        elif visitas >= meta_diaria + 2:
+            dias_excelentes.append(f"{dia} ({visitas})")
+    
+    # CALCULAR MÉTRICAS DE PROSPECCIÓN
+    prospecciones = len(df_zona[df_zona["tipo"] == "PROSPECCIÓN"]) if "tipo" in df_zona.columns else 0
+    total_visitas_zona = len(df_zona)
+    es_primera_o_segunda_semana = hoy.day <= 14
+    semana_actual = 1 if hoy.day <= 7 else 2 if hoy.day <= 14 else 3
+    
+    # Prospección recomendada según zona
+    if meta_diaria == 8:
+        prospeccion_recomendada = 3
+    else:
+        prospeccion_recomendada = 5
+    
+    # DETERMINAR TIPO DE MENSAJE
+    if pct_acumulado >= 100:
+        tipo = "recomendacion"
+        emoji = "🏆"
+        titulo = "¡EXCELENTE!"
+    elif pct_acumulado >= 80:
+        tipo = "recomendacion"
+        emoji = "✅"
+        titulo = "RECOMENDACIÓN"
+    elif pct_acumulado >= 60:
+        tipo = "recomendacion"
+        emoji = "⚠️"
+        titulo = "ATENCIÓN"
+    else:
+        tipo = "alerta"
+        emoji = "🔴"
+        titulo = "ALERTA"
+    
+    # BLOQUE 1: ESTADO GENERAL
+    if es_viernes_o_sabado:
+        mensaje = f"{emoji} {titulo} - {nombre_zona}: Llevas {total_visitas} de {meta_semanal_zona} visitas semanales ({pct_semana:.0f}%). "
+    else:
+        mensaje = f"{emoji} {titulo} - {nombre_zona}: Llevas {visitas_acumuladas} de {meta_acumulada} visitas acumuladas ({pct_acumulado:.0f}%). "
+    
+    # BLOQUE 2: DÍAS QUE FALLÓ
+    if dias_fallados:
+        if len(dias_fallados) == 1:
+            mensaje += f"Fallaste el {dias_fallados[0]}. "
         else:
-            st.markdown("<p style='opacity:0.6;font-size:13px;'>Sin registros.</p>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with col2:
-        st.markdown(f"""<div class="dashboard-panel">
-<div class="panel-title">Conversiones</div>
-<div class="panel-subtitle">% de cierres / prospectos por Zona</div>
-<div class="conv-list">{html_convs}</div>
-</div>""", unsafe_allow_html=True)
-
-    st.markdown("<div style='margin-top:30px;'></div>", unsafe_allow_html=True)
-
-    # ── SECCIÓN 2: MANTENIMIENTO ───────────────────────────────────────────────
-    df_mant = df_region[
-        df_region[COL_TIPO].str.upper() == "MANTENIMIENTO"
-    ]
-    df_mant_fis = df_mant[
-        df_mant.get(COL_TIPO_VIS, pd.Series(dtype=str)).str.upper().isin(["FÍSICA","FISICA"])
-    ]
-    grupos_mant = df_mant_fis.groupby(COL_ZONA).size().reset_index(name="Visitas").sort_values("Visitas", ascending=False).reset_index(drop=True)
-    total_mant  = grupos_mant["Visitas"].sum()
-
-    seccion_header(
-        "🔧", "Visitas por Zona - Mantenimiento",
-        f"Distribución de visitas de mantenimiento físico por Zona · {region_nombre}",
-        f"Total: {total_mant} visitas físicas",
-        gradient="linear-gradient(135deg,#065f46 0%,#10b981 100%)"
-    )
-
-    if not grupos_mant.empty:
-        html_tabla_mant = build_tabla_estado_html(grupos_mant, total_mant)
-        col_graf, col_det = st.columns([3, 2])
-
-        with col_graf:
-            st.markdown("""
-<div class="dashboard-panel" style="margin-bottom:15px;">
-<div class="panel-title">Distribución de Visitas por Zona</div>
-<div class="panel-subtitle">Solo Mantenimiento · Tipo Visita = Física</div>
-</div>""", unsafe_allow_html=True)
-            fig = go.Figure(go.Bar(
-                x=grupos_mant[COL_ZONA],
-                y=grupos_mant["Visitas"],
-                marker_color=[PALETA_RUTAS[i % len(PALETA_RUTAS)] for i in range(len(grupos_mant))],
-                text=grupos_mant["Visitas"],
-                textposition="outside",
-                cliponaxis=False,
-            ))
-            fig.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                margin=dict(t=10, b=10, l=10, r=10),
-                xaxis=dict(showgrid=False),
-                yaxis=dict(showgrid=True, gridcolor="rgba(128,128,128,0.2)"),
-                height=320,
-            )
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-            html_rutas_mant = build_rutas_html(grupos_mant, total_mant)
-            st.markdown(f'<div class="rutas-container" style="margin-top:10px;">{html_rutas_mant}</div>', unsafe_allow_html=True)
-
-        with col_det:
-            st.markdown(f"""
-<div class="dashboard-panel" style="margin-bottom:15px;">
-<div class="panel-title" style="margin-bottom:6px;">Detalle por Zona</div>
-<div class="panel-subtitle" style="margin-bottom:10px;">Visitas, participación y estado · Prospección + Mantenimiento</div>
-{html_tabla_s1}
-</div>""", unsafe_allow_html=True)
+            dias_texto = ", ".join(dias_fallados[:-1]) + f" y {dias_fallados[-1]}"
+            mensaje += f"Fallaste el {dias_texto}. "
+    
+    # BLOQUE 3: DÍAS EXCELENTES
+    if dias_excelentes:
+        if len(dias_excelentes) == 1:
+            mensaje += f"Solo el {dias_excelentes[0]} cumpliste. "
+        else:
+            mensaje += f"Los días {', '.join(dias_excelentes)} fueron excelentes. "
+    
+    # BLOQUE 4: META RESTANTE
+    if es_viernes_o_sabado:
+        if restantes_semana > 0:
+            mensaje += f"Hoy es {dia_actual_nombre}, te faltan {restantes_semana} visitas para cerrar la semana. "
+        else:
+            mensaje += f"¡Excelente! Cumpliste la meta semanal. "
     else:
-        st.info("Sin registros de Mantenimiento físico para este periodo.")
+        if restantes_acumulado > 0:
+            mensaje += f"Hoy es {dia_actual_nombre}, te faltan {restantes_acumulado} visitas para cumplir la meta del día. "
+        else:
+            mensaje += f"¡Excelente! Cumpliste la meta del día. "
+    
+    # BLOQUE 5: PROSPECCIÓN (solo semanas 1 y 2)
+    if es_primera_o_segunda_semana:
+        if prospecciones == 0:
+            mensaje += f"⚠️ PROSPECCIÓN CRÍTICA: Estamos en semana {semana_actual}. NO TIENES prospecciones. Necesitas al menos {prospeccion_recomendada} esta semana. ¡Sal a prospectar URGENTE! "
+        elif prospecciones < prospeccion_recomendada:
+            mensaje += f"⚠️ PROSPECCIÓN: Estamos en semana {semana_actual}. Solo tienes {prospecciones} prospección(es). Necesitas al menos {prospeccion_recomendada - prospecciones} más esta semana. "
+    
+    # CIERRE ESPECIAL PARA VIERNES
+    if dia_actual_num == 4 and restantes_semana > 0:
+        mensaje += "¡Es VIERNES! Último día hábil. ¡Dale con todo!"
+    elif dia_actual_num == 5:
+        mensaje += "Es SÁBADO. Último día de la semana. ¡Cierra fuerte!"
+    
+    return f'<div class="alerta-mensaje {tipo}">{mensaje}</div>'
 
+@st.cache_data
+def load_excel(file_bytes):
+    df_raw = pd.read_excel(io.BytesIO(file_bytes), header=0)
+    cols = list(df_raw.columns)
+    rename_map = {cols[1]: "fecha", cols[6]: "Cliente o Prospecto", cols[14]: "Giro"} 
+    for name, idx in COL_POSITIONS.items():
+        if idx < len(cols) and idx not in [1, 6, 14]:
+            rename_map[cols[idx]] = name
+    df = df_raw.rename(columns=rename_map)
+    df = df.dropna(subset=["Cliente o Prospecto"])
+    df = df[df["Cliente o Prospecto"].astype(str).str.strip() != ""]
+    df = df[df["Cliente o Prospecto"].astype(str).str.upper().str.strip() != "GO TO MARKET"]
+    df["fecha"] = pd.to_datetime(df["fecha"], errors="coerce")
+    df = df.dropna(subset=["fecha"])
+    res = df['fecha'].apply(lambda x: pd.Series(obtener_datos_semana(x)))
+    df["semana_inicio"] = res[0]
+    df["semana_rango"] = res[1]
+    semanas_ordenadas_fecha = sorted(df["semana_inicio"].unique())
+    mapa_semanas = {fecha: f"Semana {i+1}" for i, fecha in enumerate(semanas_ordenadas_fecha)}
+    df["semana"] = df["semana_inicio"].map(mapa_semanas)
+    df["mes"] = df["fecha"].dt.strftime("%B %Y")
+    df["dia_semana"] = df["fecha"].dt.day_name()
+    return df, None
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# SECCIÓN: VISITAS POR ZONA - PROSPECCIÓN
-# ═══════════════════════════════════════════════════════════════════════════════
-def render_conversion_section(df_region, region_nombre):
-    """Sección Visitas por Zona - Prospección (solo Tipo = PROSPECCIÓN, Tipo Visita = FÍSICA)."""
-
-    # Filtrar: PROSPECCIÓN + FÍSICA
-    df_pros_fis = df_region[
-        df_region[COL_TIPO].str.upper().isin(["PROSPECCIÓN", "PROSPECCION"]) &
-        df_region.get(COL_TIPO_VIS, pd.Series(dtype=str)).str.upper().isin(["FÍSICA", "FISICA"])
-    ]
-    if df_pros_fis.empty:
-        return
-
-    grupos_pros = (df_pros_fis.groupby(COL_ZONA).size()
-                   .reset_index(name="Visitas")
-                   .sort_values("Visitas", ascending=False)
-                   .reset_index(drop=True))
-    total_pros = grupos_pros["Visitas"].sum()
-
-    st.markdown('<div style="margin-top:30px;"></div>', unsafe_allow_html=True)
-    seccion_header(
-        "🔍", "Visitas por Zona - Prospección",
-        f"Distribución de visitas de prospección física por Zona · {region_nombre}",
-        f"Total: {total_pros} visitas físicas",
-        gradient="linear-gradient(135deg,#4c1d95 0%,#7c3aed 100%)"
-    )
-
-    html_tabla_pros = build_tabla_estado_html(grupos_pros, total_pros)
-    col_graf, col_det = st.columns([3, 2])
-
-    with col_graf:
-        st.markdown("""
-<div class="dashboard-panel" style="margin-bottom:15px;">
-<div class="panel-title">Distribución de Visitas por Zona</div>
-<div class="panel-subtitle">Solo Prospección · Tipo Visita = Física</div>
-</div>""", unsafe_allow_html=True)
-
-        max_vis = int(grupos_pros["Visitas"].max()) if not grupos_pros.empty else 1
-        fig = go.Figure(go.Bar(
-            x=grupos_pros["Visitas"],
-            y=grupos_pros[COL_ZONA],
-            orientation="h",
-            marker_color=[PALETA_RUTAS[i % len(PALETA_RUTAS)] for i in range(len(grupos_pros))],
-            text=grupos_pros["Visitas"],
-            textposition="outside",
-            cliponaxis=False,
-        ))
-        fig.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            margin=dict(t=10, b=10, l=10, r=40),
-            xaxis=dict(showgrid=True, gridcolor="rgba(128,128,128,0.15)",
-                       range=[0, max_vis * 1.2]),
-            yaxis=dict(showgrid=False, autorange="reversed"),
-            height=max(220, len(grupos_pros) * 44),
-        )
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-        html_rutas_pros = build_rutas_html(grupos_pros, total_pros)
-        st.markdown(f'<div class="rutas-container" style="margin-top:10px;">{html_rutas_pros}</div>',
-                    unsafe_allow_html=True)
-
-    # ── Panel Alertas & Observaciones (conversión) ──────────────────────────────
-    with col_det:
-        # Calcular tasas de conversión por zona para las alertas
-        df_pros_all = df_region[df_region[COL_TIPO].str.upper().isin(["PROSPECCIÓN", "PROSPECCION"])]
-        orden_etapa = {e: i for i, e in enumerate(ETAPAS_EMBUDO)}
-        zona_stats = []
-        for i, z in enumerate(grupos_pros[COL_ZONA].tolist()):
-            df_z = df_pros_all[df_pros_all[COL_ZONA] == z]
-            n_pros = df_z[COL_CLIENTE].nunique()
-            if n_pros == 0:
-                continue
-            n_cierres = 0
-            if COL_MOTIVO in df_z.columns:
-                valid = df_z[df_z[COL_MOTIVO].str.upper().isin([e.upper() for e in ETAPAS_EMBUDO])].copy()
-                if not valid.empty:
-                    valid["_ord"] = valid[COL_MOTIVO].str.upper().map(orden_etapa)
-                    ultima = valid.sort_values("_ord").groupby(COL_CLIENTE).last()[[COL_MOTIVO]].reset_index()
-                    n_cierres = ultima[ultima[COL_MOTIVO].str.upper() == "CIERRE"].shape[0]
-            tasa = round(n_cierres / n_pros * 100, 1)
-            zona_stats.append({"zona": z, "prospectos": n_pros, "cierres": n_cierres, "tasa": tasa})
-
-        total_pros_gbl    = df_pros_all[COL_CLIENTE].nunique()
-        total_cierres_gbl = sum(z["cierres"] for z in zona_stats)
-        tasa_global = round(total_cierres_gbl / total_pros_gbl * 100, 2) if total_pros_gbl > 0 else 0.0
-
-        sin_cierre = [z for z in zona_stats if z["tasa"] == 0 and z["prospectos"] > 0]
-        top_zona   = max(zona_stats, key=lambda z: z["tasa"]) if zona_stats else None
-
-        alertas_html = ""
-        if sin_cierre:
-            for z in sin_cierre:
+# ============================================================
+# FUNCIÓN PARA GENERAR REPORTE HTML DEL DASHBOARD
+# ============================================================
+def generar_reporte_html(df_zona, nombre_zona, total_visitas, prospeccion_visitas, mantenimiento_visitas, meta_periodo, data_alertas, resumen_giro, mensaje_alerta, sel_sema, cierres=0, prospectos_unicos=0):
+    """Genera reporte HTML con métricas clave, cierres y alertas de cumplimiento con colores"""
+    
+    # Calcular métricas adicionales
+    tasa_conversion = (cierres / prospectos_unicos * 100) if prospectos_unicos > 0 else 0
+    cobertura = (prospectos_unicos / prospeccion_visitas * 100) if prospeccion_visitas > 0 else 0
+    pct_cumplimiento = (total_visitas / meta_periodo * 100) if meta_periodo > 0 else 0
+    
+    # Determinar colores según rendimiento
+    if pct_cumplimiento >= 80:
+        pct_color = "#16A34A"
+        pct_bg = "#DCFCE7"
+    elif pct_cumplimiento >= 50:
+        pct_color = "#F59E0B"
+        pct_bg = "#FEF3C7"
+    else:
+        pct_color = "#DC2626"
+        pct_bg = "#FEE2E2"
+    
+    if tasa_conversion >= 30:
+        conversion_color = "#16A34A"
+    elif tasa_conversion >= 15:
+        conversion_color = "#F59E0B"
+    else:
+        conversion_color = "#DC2626"
+    
+    if cobertura >= 70:
+        cobertura_color = "#16A34A"
+    elif cobertura >= 40:
+        cobertura_color = "#F59E0B"
+    else:
+        cobertura_color = "#DC2626"
+    
+    # ============================================================
+    # ALERTAS DE CUMPLIMIENTO CON COLORES (ROJO/VERDE)
+    # ============================================================
+    alertas_html = ""
+    if not data_alertas.empty:
+        if sel_sema == "Todas":
+            # Para vista semanal
+            for _, row in data_alertas.iterrows():
+                visitas = int(row['visitas'])
+                cumple = visitas >= 25  # Meta semanal
+                bg_color = "#DCFCE7" if cumple else "#FEE2E2"
+                text_color = "#16A34A" if cumple else "#DC2626"
+                
+                # Obtener prospección y mantenimiento de la semana si están disponibles
+                prospeccion_sem = row.get('prospeccion', 0)
+                mantenimiento_sem = row.get('mantenimiento', 0)
+                
                 alertas_html += f"""
-<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;
-            background:rgba(239,68,68,0.08);border-left:3px solid #ef4444;
-            border-radius:6px;margin-bottom:8px;">
-<span style="font-size:16px;">&#9888;</span>
-<div style="font-size:12px;">
-<strong style="color:#ef4444;">{z['zona']}:</strong><br>
-{z['prospectos']} prospectos, 0 cierres (0%)
-</div></div>"""
-        if top_zona and top_zona["tasa"] > 0:
-            alertas_html += f"""
-<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;
-            background:rgba(16,185,129,0.08);border-left:3px solid #10b981;
-            border-radius:6px;margin-bottom:8px;">
-<span style="font-size:16px;">&#10003;</span>
-<div style="font-size:12px;">
-<strong style="color:#10b981;">{top_zona['zona']}:</strong> Mayor conversión ({top_zona['tasa']}%)<br>
-{top_zona['cierres']} cierres de {top_zona['prospectos']} prospectos
-</div></div>"""
-        if not alertas_html:
-            alertas_html = "<span style='font-size:13px;opacity:0.6;'>Sin alertas en este periodo.</span>"
-
-        st.markdown(f"""
-<div class="dashboard-panel" style="margin-bottom:15px;">
-<div class="panel-title">Alertas y Observaciones</div>
-<div class="panel-subtitle">Análisis de conversión por Zona</div>
-{alertas_html}
-<div style="margin-top:18px;padding-top:14px;border-top:1px solid rgba(128,128,128,0.2);
-            display:flex;justify-content:space-between;align-items:center;">
-<span style="font-size:13px;opacity:0.65;">Conversión global</span>
-<span style="font-size:20px;font-weight:800;color:#7c3aed;">{tasa_global}%</span>
-</div>
-</div>""", unsafe_allow_html=True)
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# SECCIÓN: VISITAS DIARIAS / PATRÓN SEMANAL
-# ═══════════════════════════════════════════════════════════════════════════════
-DIAS_ES  = {0:"LUN", 1:"MAR", 2:"MIÉ", 3:"JUE", 4:"VIE", 5:"SÁB", 6:"DOM"}
-DIAS_ORD = [0, 1, 2, 3, 4, 5]          # Lun-Sáb (domingos rara vez)
-DIAS_COL = ["#3b82f6","#10b981","#f59e0b","#8b5cf6","#ef4444","#0ea5e9","#14b8a6"]
-
-def render_visitas_diarias_section(df, modo):
-    """Sección Visitas Diarias / Patrón Semanal — pestaña Todos."""
-    df_fis = df[
-        df[COL_TIPO].str.upper().isin(["PROSPECCIÓN","PROSPECCION","MANTENIMIENTO"]) &
-        df.get(COL_TIPO_VIS, pd.Series(dtype=str)).str.upper().isin(["FÍSICA","FISICA"])
-    ].copy()
-
-    if df_fis.empty:
-        return
-
-    df_fis["_dow"]  = df_fis[COL_FECHA].dt.dayofweek
-    df_fis["_date"] = df_fis[COL_FECHA].dt.date
-    df_fis["_dom"]  = df_fis[COL_FECHA].dt.day
-    total_fis = len(df_fis)
-
-    # ── Patrón por día de semana (Lun-Sáb, sin domingos) ────────────────────
-    dow_counts  = df_fis.groupby("_dow").size().reindex(range(6), fill_value=0)  # 0-5
-    dias_labels = [DIAS_ES[d] for d in DIAS_ORD]
-    dias_vals   = [int(dow_counts.get(d, 0)) for d in DIAS_ORD]
-    # Promedio por día de semana: suma de totales Lun-Sáb / 6
-    dias_sin_dom = df_fis[df_fis["_dow"] != 6]["_date"].nunique()
-    avg_dia = sum(dias_vals) / 6   # referencia para el delta de cada día
-    prom_diario = round(total_fis / max(dias_sin_dom, 1), 1)  # para el stat de promedio
-
-    # ── Totales semanales (solo modo Mes) ────────────────────────────────────
-    sem_totals = None
-    if modo == "Mes":
-        df_fis["_yw"] = (
-            df_fis[COL_FECHA].dt.isocalendar()["year"].astype(str) + "-S" +
-            df_fis[COL_FECHA].dt.isocalendar()["week"].astype(str).str.zfill(2)
-        )
-        sem_group = (df_fis.groupby("_yw").size()
-                     .reset_index(name="Visitas")
-                     .sort_values("_yw").reset_index(drop=True))
-
-        # Label: rango de fechas de la semana  13/04/2026 -- 19/04/2026
-        def sem_range_label(yw):
-            anio, snro = yw.split("-S")
-            lunes   = pd.Timestamp.fromisocalendar(int(anio), int(snro), 1)
-            domingo = lunes + pd.Timedelta(days=6)
-            return f"{lunes.strftime('%d/%m/%Y')} -- {domingo.strftime('%d/%m/%Y')}"
-
-        sem_group["Label"] = sem_group["_yw"].apply(sem_range_label)
-        sem_totals = sem_group
-
-    # ── Stats compartidos (día pico, día del mes, promedio) ──────────────────
-    idx_pico_dow = dias_vals.index(max(dias_vals)) if max(dias_vals) > 0 else 0
-    dia_pico_nom = dias_labels[idx_pico_dow]
-    dia_pico_val = dias_vals[idx_pico_dow]
-
-    dom_counts   = df_fis[df_fis["_dow"] != 6].groupby("_dom").size()
-    if not dom_counts.empty:
-        dom_pico   = int(dom_counts.idxmax())
-        dom_pico_v = int(dom_counts.max())
-        fecha_dom  = df_fis[df_fis["_dom"] == dom_pico][COL_FECHA].iloc[0]
-        dom_pico_dow = DIAS_ES[fecha_dom.dayofweek]
-    else:
-        dom_pico, dom_pico_v, dom_pico_dow = 0, 0, "-"
-
-
-
-    stats_html = f"""
-<div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;">
-<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;background:var(--secondary-background-color);">
-  <div style="width:10px;height:10px;border-radius:2px;background:#3b82f6;flex-shrink:0;"></div>
-  <span style="font-size:12px;flex:1;opacity:0.7;">Día pico</span>
-  <span style="font-size:13px;font-weight:800;color:#3b82f6;">{dia_pico_nom} ({dia_pico_val})</span>
-</div>
-<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;background:var(--secondary-background-color);">
-  <div style="width:10px;height:10px;border-radius:2px;background:#f59e0b;flex-shrink:0;"></div>
-  <span style="font-size:12px;flex:1;opacity:0.7;">{dom_pico_dow} {dom_pico}</span>
-  <span style="font-size:13px;font-weight:800;color:#f59e0b;">{dom_pico_v} visitas</span>
-</div>
-<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;background:var(--secondary-background-color);">
-  <div style="width:10px;height:10px;border-radius:2px;background:#10b981;flex-shrink:0;"></div>
-  <span style="font-size:12px;flex:1;opacity:0.7;">Promedio diario (sin domingos)</span>
-  <span style="font-size:13px;font-weight:800;color:#10b981;">{prom_diario} visitas</span>
-</div>
-</div>"""
-
-    # ── Cabecera ─────────────────────────────────────────────────────────────
-    seccion_header(
-        "📅", "Visitas Diarias / Patrón Semanal",
-        "Análisis de actividad por día de semana",
-        f"Total: {total_fis:,} visitas físicas",
-        gradient="linear-gradient(135deg,#1e40af 0%,#2563eb 100%)"
-    )
-
-    col_izq, col_der = st.columns([1, 1]) if modo == "Mes" else [st.container(), None]
-
-    # ── Panel izquierdo: Patrón por día ──────────────────────────────────────
-    with col_izq:
-        st.markdown("""
-<div class="dashboard-panel" style="margin-top:12px;padding-bottom:4px;">
-<div class="panel-title">Patrón de Visitas por Día</div>
-<div class="panel-subtitle">Distribución diaria de actividad comercial</div>
-</div>""", unsafe_allow_html=True)
-
-        fig_dow = go.Figure()
-        fig_dow.add_trace(go.Scatter(
-            x=dias_labels, y=dias_vals,
-            mode="lines+markers",
-            line=dict(color="#3b82f6", width=3, shape="spline"),
-            marker=dict(size=8, color="#3b82f6"),
-            fill="tozeroy",
-            fillcolor="rgba(59,130,246,0.12)",
-            hovertemplate="%{x}: %{y} visitas<extra></extra>",
-        ))
-        fig_dow.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            margin=dict(t=10, b=10, l=10, r=10), height=230,
-            xaxis=dict(showgrid=False),
-            yaxis=dict(showgrid=True, gridcolor="rgba(128,128,128,0.15)"),
-        )
-        st.plotly_chart(fig_dow, use_container_width=True, config={"displayModeBar": False})
-
-        # Tarjetas estilo ruta-card
-        cards_dow = ""
-        for i, (dia, val) in enumerate(zip(dias_labels, dias_vals)):
-            delta     = val - avg_dia
-            delta_pct = round(delta / avg_dia * 100) if avg_dia > 0 else 0
-            arrow     = "↑" if delta >= 0 else "↓"
-            col_delta = "#10b981" if delta >= 0 else "#ef4444"
-            color     = DIAS_COL[i]
-            bar_w     = round(val / max(dias_vals) * 100) if max(dias_vals) > 0 else 0
-            cards_dow += f"""
-<div class="ruta-card">
-<div class="ruta-header">
-  <span class="ruta-name">{dia}</span>
-  <span class="ruta-value" style="color:{color};">{val}</span>
-</div>
-<div class="ruta-progress-container">
-  <div class="ruta-progress-bar">
-    <div class="ruta-progress-fill" style="width:{bar_w}%;background:{color};"></div>
-  </div>
-  <span class="ruta-pct" style="color:{col_delta};font-size:11px;">{arrow}{'+' if delta_pct>=0 else ''}{delta_pct}%</span>
-</div>
-</div>"""
-        st.markdown(f'<div class="rutas-container">{cards_dow}</div>', unsafe_allow_html=True)
-
-        # Cuando el filtro es por Semana, los stats van aquí abajo
-        if modo == "Semana":
-            st.markdown(stats_html, unsafe_allow_html=True)
-
-    # ── Panel derecho: Totales semanales (solo Mes) ──────────────────────────
-    if modo == "Mes" and sem_totals is not None and not sem_totals.empty:
-        with col_der:
-            st.markdown("""
-<div class="dashboard-panel" style="margin-top:12px;padding-bottom:4px;">
-<div class="panel-title">Totales Semanales</div>
-<div class="panel-subtitle">Visitas por semana</div>
-</div>""", unsafe_allow_html=True)
-
-            colores_W = [PALETA_RUTAS[i % len(PALETA_RUTAS)] for i in range(len(sem_totals))]
-            fig_sem = go.Figure(go.Bar(
-                x=sem_totals["Label"], y=sem_totals["Visitas"],
-                marker_color=colores_W,
-                text=sem_totals["Visitas"], textposition="outside",
-                cliponaxis=False,
-            ))
-            fig_sem.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                margin=dict(t=10, b=30, l=10, r=10), height=250,
-                xaxis=dict(showgrid=False, tickangle=-30, tickfont=dict(size=9)),
-                yaxis=dict(showgrid=True, gridcolor="rgba(128,128,128,0.15)"),
-            )
-            st.plotly_chart(fig_sem, use_container_width=True, config={"displayModeBar": False})
-
-            # Stats sólo en modo Mes (van aquí bajo el gráfico semanal)
-            st.markdown(stats_html, unsafe_allow_html=True)
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# SECCIÓN: INDICADORES DE PROSPECCIÓN Y MANTENIMIENTO
-# ═══════════════════════════════════════════════════════════════════════════════
-def render_indicadores_giro_section(df, region_nombre):
-    """Sección Indicadores de Prospección y Mantenimiento: distribución y efectividad por giro."""
-    if COL_TIPO_CLI not in df.columns:
-        return
-    if df.empty:
-        return
-
-    orden_etapa = {e: i for i, e in enumerate(ETAPAS_EMBUDO)}
-
-    # ── Cabecera ───────────────────────────────────────────────────────────
-    st.markdown('<div style="margin-top:30px;"></div>', unsafe_allow_html=True)
-    seccion_header(
-        "📈", "Indicadores de Prospección y Mantenimiento",
-        f"Análisis por tipo de cliente (giro) · {region_nombre}",
-        f"{df[COL_TIPO_CLI].nunique()} giros registrados",
-        gradient="linear-gradient(135deg,#0f172a 0%,#1e40af 100%)"
-    )
-
-    # ── Datos por giro ─────────────────────────────────────────────────────────
-    giros = sorted(df[COL_TIPO_CLI].dropna().unique().tolist())
-    # Prospección: solo para cálculo conversion
-    df_pros_gbl = df[df[COL_TIPO].str.upper().isin(["PROSPECCIÓN", "PROSPECCION"])]
-    # Motivo TOMAR PEDIDO
-    MOTIVO_TP = "TOMAR PEDIDO"
-
-    giro_data = []  # dict por giro con todos los stats
-    for i, g in enumerate(giros):
-        df_g = df[df[COL_TIPO_CLI] == g]
-        vis_total  = len(df_g)
-        clientes_u = df_g[COL_CLIENTE].nunique()
-        # Prospectos únicos (solo Prospección)
-        df_g_pros = df_pros_gbl[df_pros_gbl[COL_TIPO_CLI] == g]
-        prospectos_u = df_g_pros[COL_CLIENTE].nunique()
-        # Cierres
-        n_cierres = 0
-        if COL_MOTIVO in df_g_pros.columns and not df_g_pros.empty:
-            valid = df_g_pros[df_g_pros[COL_MOTIVO].str.upper().isin([e.upper() for e in ETAPAS_EMBUDO])].copy()
-            if not valid.empty:
-                valid["_ord"] = valid[COL_MOTIVO].str.upper().map(orden_etapa)
-                ultima = valid.sort_values("_ord").groupby(COL_CLIENTE).last()[[COL_MOTIVO]].reset_index()
-                n_cierres = ultima[ultima[COL_MOTIVO].str.upper() == "CIERRE"].shape[0]
-        tasa_conv = round(n_cierres / prospectos_u * 100, 1) if prospectos_u > 0 else 0.0
-        # Visitas de PROSPECCIÓN para la dona
-        visitas_pros = len(df_g_pros)
-        # Visitas de MANTENIMIENTO para efectividad
-        df_g_mant = df[df[COL_TIPO_CLI] == g]
-        df_g_mant = df_g_mant[df_g_mant[COL_TIPO].str.upper() == "MANTENIMIENTO"]
-        vis_mant     = len(df_g_mant)
-        clientes_mant = df_g_mant[COL_CLIENTE].nunique()
-        if COL_MOTIVO in df_g_mant.columns and vis_mant > 0:
-            n_tp = df_g_mant[df_g_mant[COL_MOTIVO].str.upper() == MOTIVO_TP].shape[0]
+                <div style="background: {bg_color}; border-radius: 12px; padding: 15px; margin: 8px; text-align: center; min-width: 140px;">
+                    <strong style="font-size: 13px; color: #1E293B;">{row['semana']}</strong><br>
+                    <div style="font-size: 28px; font-weight: 800; color: {text_color};">{visitas}</div>
+                    <div style="font-size: 10px; color: #64748B; margin-top: 5px;">
+                        🎯 {prospeccion_sem} | 🔧 {mantenimiento_sem}
+                    </div>
+                </div>
+                """
         else:
-            n_tp = 0
-        efect = round(n_tp / vis_mant * 100, 1) if vis_mant > 0 else 0.0
-        giro_data.append({
-            "giro": g, "visitas": vis_total, "visitas_pros": visitas_pros,
-            "visitas_mant": vis_mant, "clientes_mant": clientes_mant,
-            "clientes_u": clientes_u,
-            "prospectos_u": prospectos_u, "cierres": n_cierres,
-            "tasa_conv": tasa_conv, "tomar_pedido": n_tp, "efect": efect,
-            "color": PALETA_RUTAS[i % len(PALETA_RUTAS)]
+            # Para vista diaria
+            for _, row in data_alertas.iterrows():
+                visitas = int(row['visitas'])
+                cumple = visitas >= 5  # Meta diaria
+                bg_color = "#DCFCE7" if cumple else "#FEE2E2"
+                text_color = "#16A34A" if cumple else "#DC2626"
+                
+                # Obtener prospección y mantenimiento del día
+                prospeccion_dia = row.get('prospeccion', 0)
+                mantenimiento_dia = row.get('mantenimiento', 0)
+                
+                alertas_html += f"""
+                <div style="background: {bg_color}; border-radius: 12px; padding: 15px; margin: 8px; text-align: center; min-width: 120px;">
+                    <strong style="font-size: 13px; color: #1E293B;">{row['label']}</strong><br>
+                    <div style="font-size: 28px; font-weight: 800; color: {text_color};">{visitas}</div>
+                    <div style="font-size: 10px; color: #64748B; margin-top: 5px;">
+                        🎯 {prospeccion_dia} | 🔧 {mantenimiento_dia}
+                    </div>
+                </div>
+                """
+    
+    # ============================================================
+    # RESUMEN POR GIRO (con cierres)
+    # ============================================================
+    resumen_giro_html = ""
+    if not resumen_giro.empty:
+        resumen_giro_html = '<table style="width: 100%; border-collapse: collapse; margin-top: 10px;">'
+        resumen_giro_html += '<tr style="background-color: #DC2626; color: white;">'
+        resumen_giro_html += '<th style="padding: 10px; border: 1px solid #ddd;">Giro</th>'
+        resumen_giro_html += '<th style="padding: 10px; border: 1px solid #ddd;">Clientes</th>'
+        resumen_giro_html += '<th style="padding: 10px; border: 1px solid #ddd;">Visitas</th>'
+        resumen_giro_html += '<th style="padding: 10px; border: 1px solid #ddd;">Frecuencia</th>'
+        resumen_giro_html += '<th style="padding: 10px; border: 1px solid #ddd;">Cierres</th>'
+        resumen_giro_html += '</tr>'
+        
+        for _, row in resumen_giro.iterrows():
+            resumen_giro_html += f"""
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd;">{row['Giro']}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">{row['Clientes']}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">{row['Visitas_Totales']}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">{row['Frecuencia']}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">{row.get('Cierres', 0)}</td>
+            </tr>
+            """
+        resumen_giro_html += '</table>'
+    
+    # Determinar tipo de alerta para el color
+    es_alerta = "ALERTA" in mensaje_alerta or "ATENCIÓN" in mensaje_alerta
+    bg_alerta = "#FEE2E2" if es_alerta else "#DCFCE7"
+    color_borde = "#DC2626" if es_alerta else "#16A34A"
+    
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>GTM SAC - Reporte {nombre_zona}</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        body {{ font-family: 'Inter', sans-serif; margin: 0; padding: 40px; background: #F8FAFC; }}
+        .report-container {{ max-width: 1000px; margin: 0 auto; background: white; border-radius: 20px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); overflow: hidden; }}
+        .header {{ background: linear-gradient(135deg, #DC2626 0%, #991B1B 100%); color: white; padding: 30px; text-align: center; }}
+        .header h1 {{ font-size: 28px; margin: 0; }}
+        .content {{ padding: 30px; }}
+        .alerta {{ background-color: {bg_alerta}; border-left: 5px solid {color_borde}; padding: 15px 20px; border-radius: 12px; margin-bottom: 25px; font-size: 13px; line-height: 1.4; }}
+        
+        .metrics-grid {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 30px; }}
+        .metric-card {{ background: #F8FAFC; border-radius: 12px; padding: 15px; text-align: center; border-top: 4px solid #DC2626; }}
+        .metric-label {{ font-size: 11px; color: #64748B; text-transform: uppercase; font-weight: 700; }}
+        .metric-value {{ font-size: 28px; font-weight: 800; color: #1E293B; margin: 5px 0; }}
+        .metric-sub {{ font-size: 10px; color: #94A3B8; }}
+        .metric-badge {{ display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; margin-top: 5px; }}
+        
+        .section-title {{ font-size: 18px; font-weight: 700; margin: 25px 0 15px; padding-bottom: 8px; border-bottom: 2px solid #E2E8F0; }}
+        .alertas-container {{ display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }}
+        
+        table {{ width: 100%; border-collapse: collapse; margin: 15px 0; }}
+        th, td {{ padding: 10px; border: 1px solid #E2E8F0; text-align: left; }}
+        th {{ background-color: #DC2626; color: white; }}
+        
+        .footer {{ background: #F1F5F9; padding: 15px; text-align: center; font-size: 11px; color: #94A3B8; }}
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        <div class="header">
+            <h1>Go To Market SAC</h1>
+            <p>Reporte de Gestión Comercial</p>
+            <p style="font-size: 14px;">{nombre_zona} | {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
+        </div>
+        <div class="content">
+            <!-- Alerta -->
+            <div class="alerta">{mensaje_alerta}</div>
+            
+            <!-- Métricas Clave (8 indicadores) -->
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-label">TOTAL VISITAS</div>
+                    <div class="metric-value">{total_visitas}</div>
+                    <div class="metric-sub">Meta: {meta_periodo}</div>
+                    <div class="metric-badge" style="background: {pct_bg}; color: {pct_color};">{pct_cumplimiento:.0f}%</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">🎯 PROSPECCIÓN</div>
+                    <div class="metric-value">{prospeccion_visitas}</div>
+                    <div class="metric-sub">Meta: 5/semana</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">🔧 MANTENIMIENTO</div>
+                    <div class="metric-value">{mantenimiento_visitas}</div>
+                    <div class="metric-sub">-</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">✅ CIERRES</div>
+                    <div class="metric-value">{cierres}</div>
+                    <div class="metric-sub">Meta: 2/semana</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">👥 PROSPECTOS ÚNICOS</div>
+                    <div class="metric-value">{prospectos_unicos}</div>
+                    <div class="metric-sub">-</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">📈 TASA CONVERSIÓN</div>
+                    <div class="metric-value" style="color: {conversion_color};">{tasa_conversion:.0f}%</div>
+                    <div class="metric-sub">Meta: 20%</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">📊 COBERTURA</div>
+                    <div class="metric-value" style="color: {cobertura_color};">{cobertura:.0f}%</div>
+                    <div class="metric-sub">Meta: 70%</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">📅 META SEMANAL</div>
+                    <div class="metric-value">{total_visitas}/{meta_periodo}</div>
+                    <div class="metric-sub">{pct_cumplimiento:.0f}% cumplido</div>
+                </div>
+            </div>
+            
+            <!-- Alertas de Cumplimiento CON COLORES -->
+            <div class="section-title">🚦 Alertas de Cumplimiento</div>
+            <div class="alertas-container">
+                {alertas_html if alertas_html else '<p>No hay alertas disponibles</p>'}
+            </div>
+            
+            <!-- Resumen por Giro (con cierres) -->
+            <div class="section-title">📋 Resumen Estratégico por Giro</div>
+            {resumen_giro_html if resumen_giro_html else '<p>No hay datos disponibles</p>'}
+            
+            <!-- Nota de cierre -->
+            <div style="margin-top: 30px; padding: 15px; background: #F1F5F9; border-radius: 12px; text-align: center; font-size: 12px; color: #64748B;">
+                <strong>💡 ¿Qué significan estos indicadores?</strong><br>
+                • <strong>Tasa Conversión</strong> = Cierres / Prospectos Únicos (ideal >20%)<br>
+                • <strong>Cobertura</strong> = Prospectos Únicos / Visitas Prospección (ideal <70% = más de 1 visita por prospecto)<br>
+                • <strong>Cierres</strong> = Negocios cerrados en la semana
+            </div>
+        </div>
+        <div class="footer">
+            <p>Go To Market SAC · Reporte generado automáticamente</p>
+            <p>Para guardar como PDF: Ctrl+P → "Guardar como PDF"</p>
+        </div>
+    </div>
+</body>
+</html>"""
+    return html_content
+
+# ============================================================
+# FUNCIÓN PARA GENERAR REPORTE HTML COMPLETO DEL RANKING
+# ============================================================
+def generar_reporte_ranking_completo_html(df_ranking, mes_seleccionado, mostrar_opcion, meta_periodo, semanas_transcurridas, alertas_data, total_cierres, cobertura_promedio, conversion_promedio, zonas_alta, zonas_media, zonas_baja, total_zonas, zonas_sin_cierre, zonas_sin_prospeccion, zonas_bajo_avance, zonas_baja_prospeccion, zonas_exceso_mantenimiento, zonas_alta_cobertura):
+    """Genera un reporte HTML completo del ranking con tabla y alertas"""
+    
+    traduccion_meses = {
+        "January": "Enero", "February": "Febrero", "March": "Marzo", "April": "Abril",
+        "May": "Mayo", "June": "Junio", "July": "Julio", "August": "Agosto",
+        "September": "Septiembre", "October": "Octubre", "November": "Noviembre", "December": "Diciembre"
+    }
+    
+    mes_sel_esp = mes_seleccionado
+    for eng, esp in traduccion_meses.items():
+        if eng in mes_seleccionado:
+            mes_sel_esp = mes_seleccionado.replace(eng, esp)
+            break
+    
+    # Tabla principal
+    columnas = df_ranking.columns.tolist()
+    headers_html = ""
+    for col in columnas:
+        headers_html += f'<th style="background-color: #DC2626; color: white; padding: 12px 15px; text-align: center; border: 1px solid #E2E8F0;">{col}</th>'
+    
+    filas_html = ""
+    for _, row in df_ranking.iterrows():
+        filas_html += '<tr>'
+        for col in columnas:
+            valor = row[col]
+            if col == "POS":
+                filas_html += f'<td style="background-color: #1E293B; color: white; font-weight: 800; text-align: center; padding: 10px; border: 1px solid #E2E8F0;">{valor}</td>'
+            elif col == "ZONA":
+                filas_html += f'<td style="text-align: left; font-weight: 600; padding: 10px; border: 1px solid #E2E8F0;">{valor}</td>'
+            elif col in ["% AVANCE", "COBERTURA", "TASA CONV."]:
+                try:
+                    num_val = float(str(valor).replace('%', ''))
+                    filas_html += f'<td style="text-align: center; padding: 10px; border: 1px solid #E2E8F0;">{num_val:.0f}%</td>'
+                except:
+                    filas_html += f'<td style="text-align: center; padding: 10px; border: 1px solid #E2E8F0;">{valor}</td>'
+            else:
+                filas_html += f'<td style="text-align: center; padding: 10px; border: 1px solid #E2E8F0;">{valor}</td>'
+        filas_html += '</table>'
+    
+    # Alertas HTML
+    alertas_html = ""
+    for a in alertas_data[:15]:
+        alertas_html += f"""
+        <tr>
+            <td style="padding: 10px; border: 1px solid #E2E8F0;">{a['prioridad']}</td>
+            <td style="padding: 10px; border: 1px solid #E2E8F0; font-weight: 600;">{a['zona']}</td>
+            <td style="padding: 10px; border: 1px solid #E2E8F0;">{a['alerta']}</td>
+            <td style="padding: 10px; border: 1px solid #E2E8F0;">{a['insight']}</td>
+            <td style="padding: 10px; border: 1px solid #E2E8F0;">{a['accion']}</td>
+        </tr>
+        """
+    
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>GTM SAC - Ranking de Zonas</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: 'Inter', sans-serif; background: #F8FAFC; padding: 40px; }}
+        .report-container {{ max-width: 1400px; margin: 0 auto; background: white; border-radius: 20px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); overflow: hidden; }}
+        .header {{ background: linear-gradient(135deg, #DC2626 0%, #991B1B 100%); color: white; padding: 30px; text-align: center; }}
+        .header h1 {{ font-size: 28px; }}
+        .content {{ padding: 30px; }}
+        .info {{ background: #F1F5F9; padding: 15px; border-radius: 12px; margin-bottom: 25px; }}
+        .insights-card {{ background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%); border-radius: 16px; padding: 20px; margin: 20px 0; color: white; }}
+        .insights-grid {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }}
+        .insight-box {{ background: rgba(255,255,255,0.1); padding: 12px; border-radius: 10px; text-align: center; }}
+        .table-container {{ overflow-x: auto; }}
+        table {{ width: 100%; border-collapse: collapse; font-size: 12px; }}
+        th {{ background-color: #DC2626; color: white; padding: 12px; }}
+        td {{ padding: 10px; border: 1px solid #E2E8F0; }}
+        .alertas-table {{ margin-top: 30px; }}
+        .footer {{ background: #F1F5F9; padding: 15px; text-align: center; font-size: 11px; color: #94A3B8; }}
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        <div class="header">
+            <h1>Go To Market SAC</h1>
+            <p>Ranking de Gestión de Calidad GTM - {mes_sel_esp}</p>
+            <p>Mostrar: {mostrar_opcion} | {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
+        </div>
+        <div class="content">
+            <div class="info">
+                <strong>📊 DATOS GENERALES</strong><br>
+                • Ranking INDEPENDIENTE del dashboard<br>
+                • ✅ Solo visitas FÍSICAS (regla comercial)<br>
+                • Basado en CIERRES, no en tasas<br>
+                • Meta del periodo: {meta_periodo} visitas ({semanas_transcurridas} semanas × 25)
+            </div>
+            
+            <div class="insights-card">
+                <h3 style="color: #DC2626; margin-bottom: 15px;">📈 INSIGHTS ESTRATÉGICOS - CIERRE DE SEMANA</h3>
+                <div class="insights-grid">
+                    <div class="insight-box">
+                        <strong>🔴 PRIORIDAD ALTA</strong><br>
+                        <span style="font-size: 24px; font-weight: 800;">{zonas_alta}</span><br>
+                        <span style="font-size: 11px;">requieren one-to-one URGENTE</span>
+                    </div>
+                    <div class="insight-box">
+                        <strong>🟡 SEGUIMIENTO</strong><br>
+                        <span style="font-size: 24px; font-weight: 800;">{zonas_media}</span><br>
+                        <span style="font-size: 11px;">requieren monitoreo</span>
+                    </div>
+                    <div class="insight-box">
+                        <strong>🟢 RECONOCIMIENTO</strong><br>
+                        <span style="font-size: 24px; font-weight: 800;">{zonas_baja}</span><br>
+                        <span style="font-size: 11px;">desempeño destacado</span>
+                    </div>
+                    <div class="insight-box">
+                        <strong>🎯 TOTAL CIERRES</strong><br>
+                        <span style="font-size: 24px; font-weight: 800;">{total_cierres}</span><br>
+                        <span style="font-size: 11px;">negocios cerrados</span>
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <div style="background: rgba(220,38,38,0.15); padding: 12px; border-radius: 10px; margin-bottom: 10px;">
+                        <strong>🔴 BAJO AVANCE EN VISITAS (&lt;80% de meta)</strong><br>
+                        {', '.join(zonas_bajo_avance) if zonas_bajo_avance else '✅ Todas las zonas superan el 80% de avance'}<br>
+                        <span style="font-size: 11px;">→ Revisar planificación de ruta en one-to-one</span>
+                    </div>
+                    <div style="background: rgba(220,38,38,0.15); padding: 12px; border-radius: 10px; margin-bottom: 10px;">
+                        <strong>🔴 BAJAS VISITAS DE PROSPECCIÓN (&lt;5 en semana 1-2)</strong><br>
+                        {', '.join(zonas_baja_prospeccion) if zonas_baja_prospeccion else '✅ Todas las zonas prospectan adecuadamente'}<br>
+                        <span style="font-size: 11px;">→ Salir a buscar nuevos clientes</span>
+                    </div>
+                    <div style="background: rgba(220,38,38,0.15); padding: 12px; border-radius: 10px; margin-bottom: 10px;">
+                        <strong>🔴 EXCESO DE MANTENIMIENTO (más mantenimiento que prospección)</strong><br>
+                        {', '.join(zonas_exceso_mantenimiento) if zonas_exceso_mantenimiento else '✅ Balance adecuado entre prospección y mantenimiento'}<br>
+                        <span style="font-size: 11px;">→ Las primeras semanas son para PROSPECTAR</span>
+                    </div>
+                    <div style="background: rgba(245,158,11,0.15); padding: 12px; border-radius: 10px; margin-bottom: 10px;">
+                        <strong>🟡 PROSPECTOS VISITADOS SOLO UNA VEZ (cobertura &gt;80%)</strong><br>
+                        {', '.join(zonas_alta_cobertura) if zonas_alta_cobertura else '✅ Buena re-visita a prospectos'}<br>
+                        <span style="font-size: 11px;">→ Dar segunda visita para poder cerrar</span>
+                    </div>
+                    <div style="background: rgba(220,38,38,0.15); padding: 12px; border-radius: 10px; margin-bottom: 10px;">
+                        <strong>🔴 ZONAS SIN CIERRES</strong><br>
+                        {', '.join(zonas_sin_cierre) if zonas_sin_cierre else '✅ Todas las zonas tienen cierres'}<br>
+                        <span style="font-size: 11px;">→ Revisar técnica de cierre en one-to-one</span>
+                    </div>
+                    <div style="background: rgba(245,158,11,0.15); padding: 12px; border-radius: 10px; margin-bottom: 10px;">
+                        <strong>🟡 ZONAS SIN PROSPECCIÓN</strong><br>
+                        {', '.join(zonas_sin_prospeccion) if zonas_sin_prospeccion else '✅ Todas las zonas prospectan'}<br>
+                        <span style="font-size: 11px;">→ Activar prospección URGENTE</span>
+                    </div>
+                </div>
+                
+                <div style="background: rgba(255,255,255,0.1); padding: 12px; border-radius: 10px;">
+                    <strong>📊 MÉTRICAS CLAVE DEL PERIODO</strong><br>
+                    • Cobertura promedio de prospección: {cobertura_promedio:.0f}%<br>
+                    • Tasa de conversión promedio: {conversion_promedio:.0f}%<br>
+                    • Meta del periodo: {meta_periodo} visitas ({semanas_transcurridas} semanas × 25)<br>
+                    • Zonas que superan 80% de avance: {len(zonas_bajo_avance) if zonas_bajo_avance else 0}/{total_zonas}
+                </div>
+            </div>
+            
+            <div class="table-container">
+                <h3>📊 Ranking de Productividad por Zona</h3>
+                <tr>
+                    <thead>{headers_html}</thead>
+                    <tbody>{filas_html}</tbody>
+                </table>
+            </div>
+            
+            <div class="alertas-table">
+                <h3>🚦 Alertas Estratégicas para One-to-One</h3>
+                <p>Priorizadas por nivel de urgencia. Basadas en momento del mes (Semana {semanas_transcurridas}).</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="background-color: #DC2626; color: white; padding: 10px;">PRIORIDAD</th>
+                            <th style="background-color: #DC2626; color: white; padding: 10px;">ZONA</th>
+                            <th style="background-color: #DC2626; color: white; padding: 10px;">ALERTA</th>
+                            <th style="background-color: #DC2626; color: white; padding: 10px;">INSIGHT</th>
+                            <th style="background-color: #DC2626; color: white; padding: 10px;">ACCIÓN PARA ONE-TO-ONE</th>
+                        </tr>
+                    </thead>
+                    <tbody>{alertas_html}</tbody>
+                </table>
+            </div>
+        </div>
+        <div class="footer">
+            <p>Go To Market SAC · Reporte generado automáticamente</p>
+            <p>Para guardar como PDF: Ctrl+P → "Guardar como PDF"</p>
+        </div>
+    </div>
+</body>
+</html>"""
+    return html_content
+
+# ============================================================
+# FUNCIÓN PARA GENERAR REPORTE HTML SOLO TABLA DEL RANKING
+# ============================================================
+def generar_reporte_solo_tabla_html(df_ranking, mes_seleccionado, mostrar_opcion, meta_periodo, semanas_transcurridas):
+    """Genera un reporte HTML solo con la tabla de datos del ranking"""
+    
+    traduccion_meses = {
+        "January": "Enero", "February": "Febrero", "March": "Marzo", "April": "Abril",
+        "May": "Mayo", "June": "Junio", "July": "Julio", "August": "Agosto",
+        "September": "Septiembre", "October": "Octubre", "November": "Noviembre", "December": "Diciembre"
+    }
+    
+    mes_sel_esp = mes_seleccionado
+    for eng, esp in traduccion_meses.items():
+        if eng in mes_seleccionado:
+            mes_sel_esp = mes_seleccionado.replace(eng, esp)
+            break
+    
+    columnas = df_ranking.columns.tolist()
+    headers_html = ""
+    for col in columnas:
+        headers_html += f'<th style="background-color: #DC2626; color: white; padding: 12px 15px; text-align: center; border: 1px solid #E2E8F0;">{col}</th>'
+    
+    filas_html = ""
+    for _, row in df_ranking.iterrows():
+        filas_html += '<tr>'
+        for col in columnas:
+            valor = row[col]
+            if col == "POS":
+                filas_html += f'<td style="background-color: #1E293B; color: white; font-weight: 800; text-align: center; padding: 10px; border: 1px solid #E2E8F0;">{valor}</td>'
+            elif col == "ZONA":
+                filas_html += f'<td style="text-align: left; font-weight: 600; padding: 10px; border: 1px solid #E2E8F0;">{valor}</td>'
+            elif col in ["% AVANCE", "COBERTURA", "TASA CONV."]:
+                try:
+                    num_val = float(str(valor).replace('%', ''))
+                    filas_html += f'<td style="text-align: center; padding: 10px; border: 1px solid #E2E8F0;">{num_val:.0f}%</td>'
+                except:
+                    filas_html += f'<td style="text-align: center; padding: 10px; border: 1px solid #E2E8F0;">{valor}</td>'
+            else:
+                filas_html += f'<td style="text-align: center; padding: 10px; border: 1px solid #E2E8F0;">{valor}</td>'
+        filas_html += '</tr>'
+    
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>GTM SAC - Tabla de Ranking</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: 'Inter', sans-serif; background: #F8FAFC; padding: 40px; }}
+        .report-container {{ max-width: 1400px; margin: 0 auto; background: white; border-radius: 20px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); overflow: hidden; }}
+        .header {{ background: linear-gradient(135deg, #DC2626 0%, #991B1B 100%); color: white; padding: 30px; text-align: center; }}
+        .header h1 {{ font-size: 28px; }}
+        .content {{ padding: 30px; }}
+        .info {{ background: #F1F5F9; padding: 15px; border-radius: 12px; margin-bottom: 25px; }}
+        .table-container {{ overflow-x: auto; }}
+        table {{ width: 100%; border-collapse: collapse; font-size: 12px; }}
+        th {{ background-color: #DC2626; color: white; padding: 12px; }}
+        td {{ padding: 10px; border: 1px solid #E2E8F0; }}
+        .footer {{ background: #F1F5F9; padding: 15px; text-align: center; font-size: 11px; color: #94A3B8; }}
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        <div class="header">
+            <h1>Go To Market SAC</h1>
+            <p>Ranking de Productividad - {mes_sel_esp}</p>
+            <p>Mostrar: {mostrar_opcion} | {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
+        </div>
+        <div class="content">
+            <div class="info">
+                <strong>📊 DATOS GENERALES</strong><br>
+                • Solo visitas FÍSICAS (regla comercial)<br>
+                • Basado en CIERRES, no en tasas<br>
+                • Meta del periodo: {meta_periodo} visitas ({semanas_transcurridas} semanas × 25)
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>{headers_html}</thead>
+                    <tbody>{filas_html}</tbody>
+                </table>
+            </div>
+        </div>
+        <div class="footer">
+            <p>Go To Market SAC · Reporte generado automáticamente</p>
+            <p>Para guardar como PDF: Ctrl+P → "Guardar como PDF"</p>
+        </div>
+    </div>
+</body>
+</html>"""
+    return html_content
+
+# ============================================================
+# FUNCIÓN PARA GENERAR REPORTE HTML SOLO ALERTAS
+# ============================================================
+def generar_reporte_solo_alertas_html(alertas_data, mes_seleccionado, mostrar_opcion):
+    """Genera un reporte HTML solo con las alertas para one-to-one"""
+    
+    traduccion_meses = {
+        "January": "Enero", "February": "Febrero", "March": "Marzo", "April": "Abril",
+        "May": "Mayo", "June": "Junio", "July": "Julio", "August": "Agosto",
+        "September": "Septiembre", "October": "Octubre", "November": "Noviembre", "December": "Diciembre"
+    }
+    
+    mes_sel_esp = mes_seleccionado
+    for eng, esp in traduccion_meses.items():
+        if eng in mes_seleccionado:
+            mes_sel_esp = mes_seleccionado.replace(eng, esp)
+            break
+    
+    alertas_html = ""
+    for a in alertas_data:
+        alertas_html += f"""
+        <tr>
+            <td style="padding: 12px; border: 1px solid #E2E8F0;">{a['prioridad']}</td>
+            <td style="padding: 12px; border: 1px solid #E2E8F0; font-weight: 600;">{a['zona']}</td>
+            <td style="padding: 12px; border: 1px solid #E2E8F0;">{a['alerta']}</td>
+            <td style="padding: 12px; border: 1px solid #E2E8F0;">{a['insight']}</td>
+            <td style="padding: 12px; border: 1px solid #E2E8F0;">{a['accion']}</td>
+        </tr>
+        """
+    
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>GTM SAC - Alertas One-to-One</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: 'Inter', sans-serif; background: #F8FAFC; padding: 40px; }}
+        .report-container {{ max-width: 1200px; margin: 0 auto; background: white; border-radius: 20px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); overflow: hidden; }}
+        .header {{ background: linear-gradient(135deg, #DC2626 0%, #991B1B 100%); color: white; padding: 30px; text-align: center; }}
+        .header h1 {{ font-size: 28px; }}
+        .content {{ padding: 30px; }}
+        .info {{ background: #F1F5F9; padding: 15px; border-radius: 12px; margin-bottom: 25px; }}
+        table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
+        th {{ background-color: #DC2626; color: white; padding: 12px; text-align: center; }}
+        td {{ padding: 12px; border: 1px solid #E2E8F0; }}
+        .footer {{ background: #F1F5F9; padding: 15px; text-align: center; font-size: 11px; color: #94A3B8; }}
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        <div class="header">
+            <h1>Go To Market SAC</h1>
+            <p>Alertas Estratégicas - {mes_sel_esp}</p>
+            <p>Mostrar: {mostrar_opcion} | {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
+        </div>
+        <div class="content">
+            <div class="info">
+                <strong>🚦 ALERTAS PARA ONE-TO-ONE</strong><br>
+                • Priorizadas por nivel de urgencia<br>
+                • Basadas en momento del mes<br>
+                • Usar en reuniones semanales con cada responsable de zona
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>PRIORIDAD</th>
+                        <th>ZONA</th>
+                        <th>ALERTA</th>
+                        <th>INSIGHT</th>
+                        <th>ACCIÓN PARA ONE-TO-ONE</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {alertas_html}
+                </tbody>
+            </table>
+        </div>
+        <div class="footer">
+            <p>Go To Market SAC · Reporte generado automáticamente</p>
+            <p>Para guardar como PDF: Ctrl+P → "Guardar como PDF"</p>
+        </div>
+    </div>
+</body>
+</html>"""
+    return html_content
+
+# ============================================================
+# PESTAÑA RANKING - EMBUDO DE PRODUCTIVIDAD CON ALERTAS ONE-TO-ONE
+# ============================================================
+def mostrar_pagina_ranking(df_datos):
+    """Ranking con estructura de embudo de productividad y alertas para one-to-one"""
+    
+    st.markdown("""
+    <div class="ranking-header">
+        <div class="ranking-title">🏆 Ranking de Gestión de Calidad GTM</div>
+        <div class="ranking-sub">Embudo de Productividad | Ordenado por visitas totales | ✅ Solo visitas FÍSICAS | Basado en CIERRES</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # ============================================================
+    # 1. FILTROS PROPIOS DEL RANKING
+    # ============================================================
+    col_filtros1, col_filtros2 = st.columns(2)
+    
+    with col_filtros1:
+        mostrar_opcion = st.radio(
+            "📍 Mostrar:",
+            options=["Nacional", "Lima", "Provincia"],
+            horizontal=True,
+            key="ranking_mostrar"
+        )
+    
+    df_temp_meses = df_datos.copy()
+    df_temp_meses['sabado'] = df_temp_meses['semana_inicio'] + pd.Timedelta(days=5)
+    df_temp_meses['mes_sabado'] = df_temp_meses['sabado'].dt.strftime("%B %Y")
+    df_temp_meses['fecha_sabado'] = df_temp_meses['sabado']
+    
+    df_ordenado = df_temp_meses.groupby('mes_sabado')['fecha_sabado'].min().reset_index()
+    df_ordenado = df_ordenado.sort_values('fecha_sabado')
+    meses_disponibles = df_ordenado['mes_sabado'].tolist()
+    
+    if not meses_disponibles:
+        st.warning("No hay meses disponibles")
+        return
+    
+    with col_filtros2:
+        mes_seleccionado = st.selectbox(
+            "📅 Periodo:",
+            options=meses_disponibles,
+            format_func=lambda x: x,
+            index=len(meses_disponibles) - 1 if meses_disponibles else 0,
+            key="ranking_periodo"
+        )
+    
+    # ============================================================
+    # 2. DETECTAR SEMANAS TRANSCURRIDAS
+    # ============================================================
+    df_temp_semanas = df_datos.copy()
+    df_temp_semanas['sabado'] = df_temp_semanas['semana_inicio'] + pd.Timedelta(days=5)
+    df_temp_semanas['mes_sabado'] = df_temp_semanas['sabado'].dt.strftime("%B %Y")
+    
+    semanas_del_mes = df_temp_semanas[df_temp_semanas['mes_sabado'] == mes_seleccionado]['semana'].unique()
+    semanas_del_mes = sorted(semanas_del_mes, key=lambda x: int(x.split()[-1]))
+    
+    hoy = datetime.now()
+    semanas_transcurridas = 0
+    for semana in semanas_del_mes:
+        df_temp_sab = df_temp_semanas[(df_temp_semanas['mes_sabado'] == mes_seleccionado) & 
+                                       (df_temp_semanas['semana'] == semana)]
+        if not df_temp_sab.empty:
+            sabado_semana = df_temp_sab['sabado'].max()
+            if sabado_semana <= hoy:
+                semanas_transcurridas += 1
+    
+    if semanas_transcurridas == 0:
+        semanas_transcurridas = len(semanas_del_mes)
+    
+    # ============================================================
+    # 3. CALCULAR META DINÁMICA
+    # ============================================================
+    meta_periodo = META_SEMANAL * semanas_transcurridas
+    
+    # ============================================================
+    # 4. OBTENER MES ANTERIOR
+    # ============================================================
+    idx_actual = meses_disponibles.index(mes_seleccionado)
+    mes_anterior = meses_disponibles[idx_actual - 1] if idx_actual > 0 else None
+    
+    semanas_mes_anterior = []
+    if mes_anterior:
+        semanas_mes_anterior = df_temp_semanas[df_temp_semanas['mes_sabado'] == mes_anterior]['semana'].unique()
+        semanas_mes_anterior = sorted(semanas_mes_anterior, key=lambda x: int(x.split()[-1]))[:semanas_transcurridas]
+    
+    # ============================================================
+    # 5. CLASIFICACIÓN DE ZONAS
+    # ============================================================
+    todas_las_zonas = df_datos["zona"].unique().tolist()
+    zona_clasificacion = {}
+    for zona in todas_las_zonas:
+        zona_upper = zona.upper().strip()
+        if zona_upper in [z.upper().strip() for z in ZONAS_LIMA]:
+            zona_clasificacion[zona] = "LIMA"
+        elif zona_upper in [z.upper().strip() for z in ZONAS_PROVINCIA]:
+            zona_clasificacion[zona] = "PROVINCIA"
+        else:
+            zona_clasificacion[zona] = "OTROS"
+    
+    # ============================================================
+    # 6. CALCULAR DATOS POR ZONA
+    # ============================================================
+    datos_ranking = []
+    
+    for zona in todas_las_zonas:
+        if mostrar_opcion == "Lima" and zona_clasificacion.get(zona) != "LIMA":
+            continue
+        if mostrar_opcion == "Provincia" and zona_clasificacion.get(zona) != "PROVINCIA":
+            continue
+        
+        df_temp_zona = df_datos.copy()
+        df_temp_zona['sabado'] = df_temp_zona['semana_inicio'] + pd.Timedelta(days=5)
+        df_temp_zona['mes_sabado'] = df_temp_zona['sabado'].dt.strftime("%B %Y")
+        df_mes_zona = df_temp_zona[(df_temp_zona['mes_sabado'] == mes_seleccionado) & (df_temp_zona["zona"] == zona)]
+        
+        df_periodo = df_mes_zona[df_mes_zona['semana'].isin(semanas_del_mes[:semanas_transcurridas])]
+        visitas_actual = len(df_periodo)
+        
+        if visitas_actual == 0:
+            continue
+        
+        pct_avance = (visitas_actual / meta_periodo * 100) if meta_periodo > 0 else 0
+        
+        visitas_por_semana = {}
+        for i, semana in enumerate(semanas_del_mes[:semanas_transcurridas], 1):
+            df_semana = df_periodo[df_periodo['semana'] == semana]
+            visitas_por_semana[f"S{i}"] = len(df_semana)
+        
+        df_prospeccion = df_periodo[df_periodo["tipo"] == "PROSPECCIÓN"] if "tipo" in df_periodo.columns else pd.DataFrame()
+        prospeccion_visitas = len(df_prospeccion)
+        prospectos_unicos = df_prospeccion["Cliente o Prospecto"].nunique() if not df_prospeccion.empty else 0
+        
+        if "Task" in df_periodo.columns:
+            cierres = len(df_periodo[(df_periodo["tipo"] == "PROSPECCIÓN") & 
+                                      (df_periodo["Task"].str.upper().str.contains("CIERRE", na=False))])
+        else:
+            cierres = 0
+        
+        tasa_conversion = (cierres / prospectos_unicos * 100) if prospectos_unicos > 0 else 0
+        cobertura = (prospectos_unicos / prospeccion_visitas * 100) if prospeccion_visitas > 0 else 0
+        mantenimiento_visitas = len(df_periodo[df_periodo["tipo"] == "MANTENIMIENTO"]) if "tipo" in df_periodo.columns else 0
+        
+        visitas_anterior = 0
+        crecimiento = 0
+        if mes_anterior and semanas_mes_anterior:
+            df_temp_ant = df_datos.copy()
+            df_temp_ant['sabado'] = df_temp_ant['semana_inicio'] + pd.Timedelta(days=5)
+            df_temp_ant['mes_sabado'] = df_temp_ant['sabado'].dt.strftime("%B %Y")
+            df_mes_anterior_zona = df_temp_ant[(df_temp_ant['mes_sabado'] == mes_anterior) & 
+                                                (df_temp_ant["zona"] == zona)]
+            df_periodo_anterior = df_mes_anterior_zona[df_mes_anterior_zona['semana'].isin(semanas_mes_anterior)]
+            visitas_anterior = len(df_periodo_anterior)
+            
+            if visitas_anterior > 0:
+                crecimiento = ((visitas_actual - visitas_anterior) / visitas_anterior) * 100
+        
+        datos_ranking.append({
+            "zona": zona,
+            "visitas_actual": visitas_actual,
+            "pct_avance": pct_avance,
+            "visitas_por_semana": visitas_por_semana,
+            "prospeccion_visitas": prospeccion_visitas,
+            "prospectos_unicos": prospectos_unicos,
+            "cierres": cierres,
+            "cobertura": cobertura,
+            "tasa_conversion": tasa_conversion,
+            "mantenimiento_visitas": mantenimiento_visitas,
+            "visitas_anterior": visitas_anterior,
+            "crecimiento": crecimiento
         })
-
-    total_vis = sum(g["visitas"] for g in giro_data)
-    total_pros_dona = sum(g["visitas_pros"] for g in giro_data)
-    if not giro_data or total_vis == 0:
-        st.info("Sin datos para mostrar indicadores por giro.")
+    
+    if not datos_ranking:
+        st.warning(f"No hay datos para la categoría seleccionada")
         return
-
-    col_dona, col_efect = st.columns([1, 1])
-
-    # ── Indicador 1: Distribución por tipo de cliente (dona) ────────────────
-    with col_dona:
-        st.markdown("""
-<div class="dashboard-panel" style="margin-bottom:15px;">
-<div class="panel-title">Distribución por Tipo de Cliente</div>
-<div class="panel-subtitle">Visitas de Prospección por giro de cliente</div>
-</div>""", unsafe_allow_html=True)
-
-        fig_dona = go.Figure(go.Pie(
-            labels=[g["giro"] for g in giro_data],
-            values=[g["visitas_pros"] for g in giro_data],
-            hole=0.52,
-            marker_colors=[g["color"] for g in giro_data],
-            textinfo="label+percent",
-            hovertemplate="%{label}: %{value} visitas (%{percent})<extra></extra>",
-        ))
-        fig_dona.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)",
-            margin=dict(t=10, b=130, l=10, r=10),
-            height=420,
-            legend=dict(orientation="h", yanchor="bottom", y=-0.38, xanchor="center", x=0.5),
-            showlegend=True,
+    
+    datos_ranking.sort(key=lambda x: x["visitas_actual"], reverse=True)
+    for i, item in enumerate(datos_ranking, 1):
+        item["posicion"] = i
+    
+        # ============================================================
+    # 7. CONSTRUIR TABLA PRINCIPAL
+    # ============================================================
+    datos_para_df = []
+    mes_anterior_nombre = mes_anterior.split()[0] if mes_anterior else "N/A"
+    
+    for d in datos_ranking:
+        fila = {
+            "POS": d['posicion'],
+            "ZONA": d['zona'],
+            "% CUMPLIMIENTO": d['pct_avance'],  # ← CAMBIADO
+            "VISITAS": d['visitas_actual'],
+        }
+        for i in range(1, semanas_transcurridas + 1):
+            fila[f"SEM {i}"] = d['visitas_por_semana'].get(f"S{i}", 0)  # ← CAMBIADO
+        
+        fila["PROSPECCIÓN"] = d['prospeccion_visitas']
+        fila["PROSPECTOS ÚNICOS"] = d['prospectos_unicos']
+        fila["CIERRES"] = d['cierres']
+        fila["COBERTURA"] = d['cobertura']
+        fila["MANTENIMIENTO"] = d['mantenimiento_visitas']
+        fila["TASA CONV."] = d['tasa_conversion']
+        fila[f"{mes_anterior_nombre} (mismo rango)"] = d['visitas_anterior']
+        crecimiento_str = f"▲ {d['crecimiento']:.1f}%" if d['crecimiento'] >= 0 else f"▼ {abs(d['crecimiento']):.1f}%"
+        fila["MES ANTERIOR"] = crecimiento_str if d['crecimiento'] != 0 else "0%"  # ← CAMBIADO
+        datos_para_df.append(fila)
+    
+    df_ranking_show = pd.DataFrame(datos_para_df)
+    
+    st.subheader("📊 Ranking de Productividad por Zona")
+    
+    column_config = {
+        "POS": st.column_config.TextColumn("POS", width="small"),
+        "ZONA": st.column_config.TextColumn("ZONA", width="medium"),
+        "% CUMPLIMIENTO": st.column_config.ProgressColumn("% CUMPLIMIENTO", format="%.0f%%", min_value=0, max_value=100, width="small"),  # ← CAMBIADO
+        "VISITAS": st.column_config.NumberColumn("VISITAS", width="small"),
+    }
+    for i in range(1, semanas_transcurridas + 1):
+        column_config[f"SEM {i}"] = st.column_config.NumberColumn(f"SEM {i}", width="small")  # ← CAMBIADO
+    column_config.update({
+        "PROSPECCIÓN": st.column_config.NumberColumn("PROSPECCIÓN", width="medium"),
+        "PROSPECTOS ÚNICOS": st.column_config.NumberColumn("PROSPECTOS ÚNICOS", width="medium"),
+        "CIERRES": st.column_config.NumberColumn("CIERRES", width="small"),
+        "COBERTURA": st.column_config.ProgressColumn("COBERTURA", format="%.0f%%", min_value=0, max_value=100, width="small"),
+        "MANTENIMIENTO": st.column_config.NumberColumn("MANTENIMIENTO", width="medium"),
+        "TASA CONV.": st.column_config.ProgressColumn("TASA CONV.", format="%.0f%%", min_value=0, max_value=100, width="small"),
+        f"{mes_anterior_nombre} (mismo rango)": st.column_config.NumberColumn(f"{mes_anterior_nombre} (mismo rango)", width="medium"),
+        "MES ANTERIOR": st.column_config.TextColumn("MES ANTERIOR", width="small"),  # ← CAMBIADO
+    })
+    
+    
+    st.dataframe(df_ranking_show, use_container_width=True, hide_index=True, column_config=column_config)
+    
+    # ============================================================
+    # 8. ALERTAS ESTRATÉGICAS (CON FÓRMULA PONDERADA)
+    # ============================================================
+    st.subheader("🚦 Alertas Estratégicas para One-to-One")
+    st.caption(f"📅 Semana {semanas_transcurridas} de {len(semanas_del_mes)} | Prioridad calculada con fórmula ponderada")
+    
+    # Función para calcular factor según rango
+    def get_factor_avance(pct):
+        if pct < 60:
+            return 3  # 🔴 ALTA
+        elif pct < 80:
+            return 2  # 🟡 MEDIA
+        else:
+            return 1  # 🟢 BAJA
+    
+    def get_factor_gestion(mantenimiento, prospeccion, semana):
+        total = mantenimiento + prospeccion
+        if total == 0:
+            return 2
+        pct_mantenimiento = (mantenimiento / total) * 100
+        
+        if semana <= 2:  # Semanas 1-2: enfoque en prospección
+            if pct_mantenimiento >= 80:
+                return 3  # 🔴 ALTA
+            elif pct_mantenimiento >= 60:
+                return 2  # 🟡 MEDIA
+            else:
+                return 1  # 🟢 BAJA
+        else:  # Semanas 3-5: enfoque en mantenimiento
+            if pct_mantenimiento >= 90:
+                return 1  # 🟢 BAJA (bueno, está haciendo mantenimiento)
+            elif pct_mantenimiento >= 80:
+                return 2  # 🟡 MEDIA
+            else:
+                return 1  # 🟢 BAJA
+    
+    def get_factor_cobertura(cobertura):
+        if cobertura >= 80:
+            return 3  # 🔴 ALTA (visita solo una vez)
+        elif cobertura >= 50:
+            return 2  # 🟡 MEDIA
+        else:
+            return 1  # 🟢 BAJA
+    
+    def get_factor_cierres(cierres, semana):
+        if semana <= 2:  # Semanas 1-2: no se evalúa cierres
+            return 1
+        if cierres < 2:
+            return 3  # 🔴 ALTA
+        elif cierres >= 3:
+            return 1  # 🟢 BAJA
+        else:
+            return 2  # 🟡 MEDIA
+    
+    # Pesos
+    PESO_AVANCE = 0.40
+    PESO_GESTION = 0.25
+    PESO_COBERTURA = 0.25
+    PESO_CIERRES = 0.10
+    
+    alertas_data = []
+    
+    for d in datos_ranking:
+        # Calcular factores
+        factor_avance = get_factor_avance(d['pct_avance'])
+        factor_gestion = get_factor_gestion(d['mantenimiento_visitas'], d['prospeccion_visitas'], semanas_transcurridas)
+        factor_cobertura = get_factor_cobertura(d['cobertura'])
+        factor_cierres = get_factor_cierres(d['cierres'], semanas_transcurridas)
+        
+        # Calcular peso total
+        peso_total = (PESO_AVANCE * factor_avance) + (PESO_GESTION * factor_gestion) + (PESO_COBERTURA * factor_cobertura) + (PESO_CIERRES * factor_cierres)
+        
+        # Determinar prioridad final
+        if peso_total >= 2.3:
+            prioridad_final = "🔴 ALTA"
+        elif peso_total >= 1.5:
+            prioridad_final = "🟡 MEDIA"
+        else:
+            prioridad_final = "🟢 BAJA"
+        
+        # Determinar la alerta principal según el factor más crítico
+        factores = {
+            "avance": factor_avance,
+            "gestion": factor_gestion,
+            "cobertura": factor_cobertura,
+            "cierres": factor_cierres
+        }
+        factor_max = max(factores.values())
+        
+        if factor_max == factor_avance and factor_avance >= 2:
+            alerta_nombre = "Bajo avance en visitas"
+            insight_texto = f"{d['pct_avance']:.0f}% de avance ({d['visitas_actual']}/{meta_periodo} visitas)"
+            accion_texto = f"Vamos por la semana {semanas_transcurridas} y llevas solo {d['pct_avance']:.0f}% de la meta. Necesitas activar más visitas."
+        elif factor_max == factor_gestion and factor_gestion >= 2:
+            alerta_nombre = "Distribución incorrecta de visitas"
+            insight_texto = f"{d['mantenimiento_visitas']} mantenimiento vs {d['prospeccion_visitas']} prospección"
+            if semanas_transcurridas <= 2:
+                accion_texto = "Estás haciendo más visitas de mantenimiento que de prospección. Las primeras semanas son para PROSPECTAR."
+            else:
+                accion_texto = "Revisa tu distribución de visitas entre prospección y mantenimiento."
+        elif factor_max == factor_cobertura and factor_cobertura >= 2:
+            alerta_nombre = "Prospectos visitados solo una vez"
+            insight_texto = f"{d['prospeccion_visitas']} visitas a {d['prospectos_unicos']} prospectos únicos ({d['cobertura']:.0f}% cobertura)"
+            accion_texto = "Estás visitando a tus prospectos solo una vez. Dale una segunda visita para poder cerrar."
+        elif factor_max == factor_cierres and factor_cierres >= 2 and semanas_transcurridas > 2:
+            alerta_nombre = "Sin cierres suficientes"
+            insight_texto = f"{d['cierres']} cierres en el periodo"
+            accion_texto = "Necesitas cerrar más prospectos. Revisemos tu técnica de cierre."
+        else:
+            # Si todos los factores son bajos, es una zona con buen desempeño
+            if d['cierres'] >= 3:
+                alerta_nombre = "¡Cierres destacados!"
+                insight_texto = f"{d['cierres']} cierres en el periodo"
+                accion_texto = "Reconocimiento público. Comparte tu método con el equipo."
+                prioridad_final = "🟢 BAJA"
+            else:
+                continue  # No mostrar alerta si no hay nada crítico
+        
+        alertas_data.append({
+            "prioridad": prioridad_final,
+            "zona": d['zona'],
+            "alerta": alerta_nombre,
+            "insight": insight_texto,
+            "accion": accion_texto,
+            "peso_total": peso_total
+        })
+    
+    if alertas_data:
+        # Ordenar por prioridad (ALTA → MEDIA → BAJA) y luego por peso_total descendente
+        orden_prioridad = {"🔴 ALTA": 0, "🟡 MEDIA": 1, "🟢 BAJA": 2}
+        alertas_data.sort(key=lambda x: (orden_prioridad.get(x["prioridad"], 3), -x["peso_total"]))
+        
+        df_alertas = pd.DataFrame(alertas_data)
+        st.dataframe(
+            df_alertas[["prioridad", "zona", "alerta", "insight", "accion"]],
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "prioridad": st.column_config.TextColumn("PRIORIDAD", width="small"),
+                "zona": st.column_config.TextColumn("ZONA", width="medium"),
+                "alerta": st.column_config.TextColumn("ALERTA", width="medium"),
+                "insight": st.column_config.TextColumn("INSIGHT", width="large"),
+                "accion": st.column_config.TextColumn("ACCIÓN PARA ONE-TO-ONE", width="large"),
+            }
         )
-        st.plotly_chart(fig_dona, use_container_width=True, config={"displayModeBar": False})
-
-        # Tarjetas por giro: visitas prospección | prospectos únicos | cierres | tasa
-        cards_giro = ""
-        for g in sorted(giro_data, key=lambda x: x["visitas_pros"], reverse=True):
-            color = g["color"]
-            bar_w = round(g["visitas_pros"] / total_pros_dona * 100) if total_pros_dona > 0 else 0
-            cards_giro += f"""
-<div class="ruta-card">
-<div class="ruta-header">
-  <span class="ruta-name">{g['giro']}</span>
-  <span class="ruta-value" style="color:{color};">{g['visitas_pros']}</span>
-</div>
-<div class="ruta-progress-container">
-  <div class="ruta-progress-bar">
-    <div class="ruta-progress-fill" style="width:{bar_w}%;background:{color};"></div>
-  </div>
-</div>
-<div style="display:flex;gap:16px;margin-top:6px;font-size:11px;opacity:0.75;">
-  <span>&#128100; {g['prospectos_u']} prospec.</span>
-  <span>&#9989; {g['cierres']} cierres</span>
-  <span>&#128200; {g['tasa_conv']}% conv.</span>
-</div>
-</div>"""
-        st.markdown(f'<div class="rutas-container" style="margin-top:12px;">{cards_giro}</div>',
-                    unsafe_allow_html=True)
-
-    # ── Indicador 2: Efectividad por giro de cartera ──────────────────────
-    with col_efect:
-        st.markdown("""
-<div class="dashboard-panel" style="margin-bottom:15px;">
-<div class="panel-title">Efectividad por Giro de Cartera</div>
-<div class="panel-subtitle">Tomar Pedido sobre visitas de Mantenimiento por giro</div>
-</div>""", unsafe_allow_html=True)
-
-        giro_efect_sorted = sorted(giro_data, key=lambda x: x["efect"], reverse=True)
-        for g in giro_efect_sorted:
-            color  = g["color"]
-            efect  = g["efect"]
-            bar_w  = min(efect, 100)
-            st.markdown(f"""
-<div class="ruta-card" style="margin-bottom:10px;">
-<div class="ruta-header">
-  <span class="ruta-name" style="font-size:14px;font-weight:700;">{g['giro']}</span>
-  <span class="ruta-value" style="color:{color};font-size:16px;">{efect}%</span>
-</div>
-<div class="ruta-progress-container">
-  <div class="ruta-progress-bar">
-    <div class="ruta-progress-fill" style="width:{bar_w}%;background:{color};"></div>
-  </div>
-</div>
-<div style="display:flex;gap:18px;margin-top:8px;font-size:11px;opacity:0.75;">
-  <span>&#128200; {g['visitas_mant']} vis. mant.</span>
-  <span>&#128100; {g['clientes_mant']} clientes</span>
-  <span>&#128722; {g['tomar_pedido']} Tomar Pedido</span>
-</div>
-</div>""", unsafe_allow_html=True)
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# PESTAÑAS
-# ═══════════════════════════════════════════════════════════════════════════════
-tab_todos, tab_prov, tab_lima = st.tabs(["🌎 Todos", "🏞️ Provincia", "🏙️ Lima"])
-
-with tab_todos:
-    if dff.empty:
-        st.info("No hay datos para mostrar.")
+        
+        # Mostrar resumen de prioridades
+        st.markdown(f"""
+        <div style="background: #F1F5F9; padding: 12px; border-radius: 10px; margin-top: 10px;">
+            <strong>📊 RESUMEN DE PRIORIDADES:</strong><br>
+            🔴 ALTA: {len([a for a in alertas_data if a['prioridad'] == '🔴 ALTA'])} zonas | 
+            🟡 MEDIA: {len([a for a in alertas_data if a['prioridad'] == '🟡 MEDIA'])} zonas | 
+            🟢 BAJA: {len([a for a in alertas_data if a['prioridad'] == '🟢 BAJA'])} zonas
+        </div>
+        """, unsafe_allow_html=True)
     else:
-        render_region_dashboard(dff, "Todos", is_todos=True)
-        render_visitas_diarias_section(dff, modo_fecha)
-        render_indicadores_giro_section(dff, "Todos")
-
-with tab_prov:
-    if COL_REGION in dff.columns:
-        df_prov = dff[dff[COL_REGION].str.upper() == "PROVINCIA"]
-        if df_prov.empty:
-            st.info("Sin datos de Provincia para los filtros actuales.")
-        else:
-            render_region_dashboard(df_prov, "Provincia")
-        render_conversion_section(df_prov, "Provincia")
-        render_indicadores_giro_section(df_prov, "Provincia")
-    else:
-        st.warning("Falta la columna Región.")
-
-with tab_lima:
-    if COL_REGION in dff.columns:
-        df_lim = dff[dff[COL_REGION].str.upper() == "LIMA"]
-        if df_lim.empty:
-            st.info("Sin datos de Lima para los filtros actuales.")
-        else:
-            render_region_dashboard(df_lim, "Lima")
-        render_conversion_section(df_lim, "Lima")
-        render_indicadores_giro_section(df_lim, "Lima")
-    else:
-        st.warning("Falta la columna Región.")
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# SIDEBAR – EXPORTAR
-# ═══════════════════════════════════════════════════════════════════════════════
-with st.sidebar:
-    st.divider()
-    st.markdown("### 📥 Exportar")
-    if st.button("Presentación PPTX", use_container_width=True):
-
-        try:
-            import io
-            from pptx import Presentation
-            from pptx.util import Inches, Pt, Emu
-            from pptx.dml.color import RGBColor
-            from pptx.enum.text import PP_ALIGN
-            import matplotlib
-            matplotlib.use("Agg")
-            import matplotlib.pyplot as plt
-            import matplotlib.patches as mpatches
-
-            # ── Paleta y helpers ──────────────────────────────────────────────
-            AZUL      = RGBColor(0x1d, 0x4e, 0xd8)
-            VERDE     = RGBColor(0x06, 0x5f, 0x46)
-            BLANCO    = RGBColor(0xFF, 0xFF, 0xFF)
-            GRIS_OSC  = RGBColor(0x1e, 0x3a, 0x8a)
-            GRIS_CLR  = RGBColor(0x64, 0x74, 0x8B)
-            W, H = Inches(13.33), Inches(7.5)
-
-            def set_bg(slide, r, g, b):
-                fill = slide.background.fill
-                fill.solid()
-                fill.fore_color.rgb = RGBColor(r, g, b)
-
-            def txbox(slide, text, left, top, width, height,
-                      font_size=18, bold=False, color=None, align=PP_ALIGN.LEFT, wrap=True):
-                tb = slide.shapes.add_textbox(left, top, width, height)
-                tf = tb.text_frame
-                tf.word_wrap = wrap
-                p  = tf.paragraphs[0]
-                p.alignment = align
-                run = p.add_run()
-                run.text = text
-                run.font.size = Pt(font_size)
-                run.font.bold = bold
-                if color:
-                    run.font.color.rgb = color
-                return tb
-
-            def add_rect(slide, left, top, width, height, fill_rgb, radius=False):
-                shape = slide.shapes.add_shape(
-                    1, left, top, width, height)  # 1 = MSO_SHAPE_TYPE.RECTANGLE
-                shape.fill.solid()
-                shape.fill.fore_color.rgb = RGBColor(*fill_rgb)
-                shape.line.fill.background()
-                return shape
-
-            def fig_to_bytes(fig):
-                buf = io.BytesIO()
-                fig.savefig(buf, format="png", bbox_inches="tight", dpi=150, facecolor=fig.get_facecolor())
-                buf.seek(0)
-                return buf
-
-            def bar_chart_bytes(grupos_df, title, palette):
-                """Dibuja un gráfico de barras con matplotlib y devuelve bytes PNG."""
-                fig, ax = plt.subplots(figsize=(9, 3.5), facecolor="#F8FAFC")
-                ax.set_facecolor("#F8FAFC")
-                zonas  = grupos_df[COL_ZONA].tolist()
-                visits = grupos_df["Visitas"].tolist()
-                colors = [palette[i % len(palette)] for i in range(len(zonas))]
-                bars = ax.bar(zonas, visits, color=colors, edgecolor="none", width=0.55)
-                for bar, v in zip(bars, visits):
-                    ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.3,
-                            str(v), ha="center", va="bottom", fontsize=9, fontweight="bold", color="#1e3a8a")
-                ax.set_title(title, fontsize=11, fontweight="bold", color="#1e3a8a", pad=8)
-                ax.set_xlabel("")
-                ax.spines[["top","right","left"]].set_visible(False)
-                ax.tick_params(axis="y", left=False, labelleft=False)
-                ax.tick_params(axis="x", labelsize=8)
-                plt.tight_layout()
-                return fig_to_bytes(fig)
-
-            def kpi_slide_data(df_r, region_nombre, prs):
-                """Agrega una slide con KPIs + tabla de zonas para la región."""
-                slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank
-                set_bg(slide, 0xF8, 0xFA, 0xFC)
-
-                # Cabecera azul
-                add_rect(slide, 0, 0, W, Inches(1.1), (0x1d, 0x4e, 0xd8))
-                txbox(slide, f"📊  Resumen Ejecutivo · {region_nombre}",
-                      Inches(0.3), Inches(0.15), Inches(9), Inches(0.5),
-                      font_size=22, bold=True, color=BLANCO)
-                txbox(slide, rango_label,
-                      Inches(0.3), Inches(0.65), Inches(9), Inches(0.35),
-                      font_size=12, bold=False, color=BLANCO)
-
-                # KPIs
-                tot_vis, tot_pros, n_cierres, t_conv = calc_kpis(df_r)
-                kpi_data = [
-                    ("Visitas Totales", str(tot_vis),  (0x3b, 0x82, 0xf6)),
-                    ("Prospectos",      str(tot_pros), (0x10, 0xb9, 0x81)),
-                    ("Cierres",         str(n_cierres),(0xf5, 0x9e, 0x0b)),
-                    ("Conversión",      f"{t_conv}%",  (0x8b, 0x5c, 0xf6)),
-                ]
-                card_w = Inches(2.8)
-                card_h = Inches(1.4)
-                card_top = Inches(1.25)
-                gap = Inches(0.4)
-                for i, (label, val, rgb) in enumerate(kpi_data):
-                    left = Inches(0.4) + i * (card_w + gap)
-                    add_rect(slide, left, card_top, card_w, card_h, (0xFF,0xFF,0xFF))
-                    # Borde izquierdo coloreado simulado con rectángulo estrecho
-                    add_rect(slide, left, card_top, Inches(0.07), card_h, rgb)
-                    txbox(slide, label, left + Inches(0.15), card_top + Inches(0.12),
-                          card_w - Inches(0.2), Inches(0.35), font_size=10, color=GRIS_CLR)
-                    txbox(slide, val,   left + Inches(0.15), card_top + Inches(0.5),
-                          card_w - Inches(0.2), Inches(0.6), font_size=26, bold=True,
-                          color=RGBColor(*rgb))
-
-                # Tabla de zonas (si hay datos)
-                if COL_ZONA in df_r.columns:
-                    df_fis = df_r[
-                        df_r[COL_TIPO].str.upper().isin(["PROSPECCIÓN","PROSPECCION","MANTENIMIENTO"]) &
-                        df_r.get(COL_TIPO_VIS, pd.Series(dtype=str)).str.upper().isin(["FÍSICA","FISICA"])
-                    ]
-                    grupos = df_fis.groupby(COL_ZONA).size().reset_index(name="Visitas").sort_values("Visitas", ascending=False).reset_index(drop=True)
-                    total  = grupos["Visitas"].sum()
-
-                    tbl_top  = Inches(2.85)
-                    tbl_left = Inches(0.4)
-                    tbl_w    = Inches(12.5)
-                    row_h    = Inches(0.32)
-                    cols_w   = [Inches(3.5), Inches(2), Inches(2), Inches(4.5)]
-                    headers  = ["Zona", "Visitas", "% Part.", "Estado"]
-
-                    # Cabecera tabla
-                    x = tbl_left
-                    for ci, (hdr, cw) in enumerate(zip(headers, cols_w)):
-                        add_rect(slide, x, tbl_top, cw, row_h, (0x1d, 0x4e, 0xd8))
-                        txbox(slide, hdr, x + Inches(0.05), tbl_top + Inches(0.04),
-                              cw - Inches(0.1), row_h, font_size=10, bold=True, color=BLANCO)
-                        x += cw
-
-                    # Filas
-                    EST_COLORS = {"ACTIVO": (0x10,0xb9,0x81), "REGULAR": (0xf5,0x9e,0x0b), "BAJO": (0xef,0x44,0x44)}
-                    for ri, row in grupos.iterrows():
-                        y = tbl_top + (ri+1)*row_h
-                        if y + row_h > Inches(7.1):
-                            break
-                        zona  = row[COL_ZONA]
-                        vis   = row["Visitas"]
-                        pct   = round(vis/total*100, 1) if total > 0 else 0
-                        est   = obtener_estado(vis, df_estado_usar, num_periodos)
-                        est_u = est.upper()
-                        c_est = EST_COLORS.get(next((k for k in EST_COLORS if k in est_u), ""), (0x64,0x74,0x8B))
-                        bg_row = (0xFF,0xFF,0xFF) if ri % 2 == 0 else (0xF1,0xF5,0xF9)
-                        x = tbl_left
-                        for ci, (val, cw) in enumerate(zip([zona, str(vis), f"{pct}%", est], cols_w)):
-                            add_rect(slide, x, y, cw, row_h, bg_row)
-                            col_txt = RGBColor(*c_est) if ci == 3 else GRIS_OSC
-                            txbox(slide, val, x + Inches(0.05), y + Inches(0.04),
-                                  cw - Inches(0.1), row_h, font_size=9,
-                                  bold=(ci == 3), color=col_txt)
-                            x += cw
-
-            def mant_slide(df_r, region_nombre, prs):
-                """Agrega slide con gráfico de barras de Mantenimiento."""
-                slide = prs.slides.add_slide(prs.slide_layouts[6])
-                set_bg(slide, 0xF8, 0xFA, 0xFC)
-                add_rect(slide, 0, 0, W, Inches(1.1), (0x06, 0x5f, 0x46))
-                txbox(slide, f"🔧  Visitas por Zona - Mantenimiento · {region_nombre}",
-                      Inches(0.3), Inches(0.15), Inches(10), Inches(0.5),
-                      font_size=20, bold=True, color=BLANCO)
-                txbox(slide, rango_label, Inches(0.3), Inches(0.65), Inches(9), Inches(0.35),
-                      font_size=12, color=BLANCO)
-
-                df_mant_fis = df_r[
-                    (df_r[COL_TIPO].str.upper() == "MANTENIMIENTO") &
-                    df_r.get(COL_TIPO_VIS, pd.Series(dtype=str)).str.upper().isin(["FÍSICA","FISICA"])
-                ]
-                grupos_m = df_mant_fis.groupby(COL_ZONA).size().reset_index(name="Visitas").sort_values("Visitas", ascending=False).reset_index(drop=True)
-                if grupos_m.empty:
-                    txbox(slide, "Sin datos de Mantenimiento físico para el periodo.",
-                          Inches(1), Inches(2), Inches(10), Inches(1), font_size=14, color=GRIS_CLR)
-                    return
-
-                chart_bytes = bar_chart_bytes(grupos_m, "Distribución de Visitas por Zona (Mantenimiento)", PALETA_RUTAS)
-                slide.shapes.add_picture(chart_bytes, Inches(0.5), Inches(1.3), Inches(12.3), Inches(4.5))
-
-            # ── Armar presentación ─────────────────────────────────────────────
-            prs = Presentation()
-            prs.slide_width  = W
-            prs.slide_height = H
-
-            # Slide portada
-            slide_cover = prs.slides.add_slide(prs.slide_layouts[6])
-            set_bg(slide_cover, 0x1d, 0x4e, 0xd8)
-            txbox(slide_cover, "🗺️  Reporte de Visitas Comerciales",
-                  Inches(1), Inches(2.2), Inches(11), Inches(1.2),
-                  font_size=36, bold=True, color=BLANCO, align=PP_ALIGN.CENTER)
-            txbox(slide_cover, rango_label.capitalize(),
-                  Inches(1), Inches(3.5), Inches(11), Inches(0.6),
-                  font_size=18, color=RGBColor(0xBF, 0xDB, 0xFF), align=PP_ALIGN.CENTER)
-            txbox(slide_cover, f"Vendedor: {sel_vendedor}",
-                  Inches(1), Inches(4.2), Inches(11), Inches(0.5),
-                  font_size=13, color=RGBColor(0xBF, 0xDB, 0xFF), align=PP_ALIGN.CENTER)
-
-            # Slides por región
-            regiones = [("Todos", dff)]
-            if COL_REGION in dff.columns:
-                df_prov = dff[dff[COL_REGION].str.upper() == "PROVINCIA"]
-                df_lim  = dff[dff[COL_REGION].str.upper() == "LIMA"]
-                if not df_prov.empty:
-                    regiones.append(("Provincia", df_prov))
-                if not df_lim.empty:
-                    regiones.append(("Lima", df_lim))
-
-            for nombre, df_r in regiones:
-                kpi_slide_data(df_r, nombre, prs)
-                if nombre != "Todos":
-                    mant_slide(df_r, nombre, prs)
-
-            # Guardar en buffer y ofrecer descarga
-            buf_pptx = io.BytesIO()
-            prs.save(buf_pptx)
-            buf_pptx.seek(0)
-            st.sidebar.download_button(
-                label="⬇️ Descargar PPTX",
-                data=buf_pptx,
-                file_name=f"reporte_visitas_{rango_label.replace(' ','_')[:40]}.pptx",
-                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        st.success("✅ No hay alertas activas. ¡Excelente desempeño general!")
+    
+    # ============================================================
+    # 9. BOTONES DE DESCARGA
+    # ============================================================
+    st.markdown("---")
+    st.subheader("📥 Descargar Reportes")
+    st.caption("Los reportes se descargan en formato HTML (abrir en navegador y Ctrl+P para PDF)")
+    
+    col_boton1, col_boton2, col_boton3 = st.columns(3)
+    
+    with col_boton1:
+        ranking_html_completo = generar_reporte_ranking_completo_html(
+            df_ranking_show, mes_seleccionado, mostrar_opcion, meta_periodo, semanas_transcurridas,
+            alertas_data, 0, 0, 0,  # total_cierres, cobertura_promedio, conversion_promedio (no se usan)
+            0, 0, 0, len(datos_ranking), [], [], [], [], [], []
+        )
+        st.download_button(
+            label="📊 Ranking de Productividad (HTML)",
+            data=ranking_html_completo,
+            file_name=f"ranking_productividad_{mes_seleccionado.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.html",
+            mime="text/html",
+            use_container_width=True
+        )
+    
+    with col_boton2:
+        if alertas_data:
+            alertas_html = generar_reporte_solo_alertas_html(
+                alertas_data, mes_seleccionado, mostrar_opcion
             )
-            st.sidebar.success("✅ Presentación lista para descargar.")
+            st.download_button(
+                label="⚠️ Alertas One-to-One (HTML)",
+                data=alertas_html,
+                file_name=f"alertas_one_to_one_{mes_seleccionado.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.html",
+                mime="text/html",
+                use_container_width=True
+            )
+        else:
+            st.info("ℹ️ No hay alertas para descargar")
+    
+    with col_boton3:
+        solo_tabla_html = generar_reporte_solo_tabla_html(
+            df_ranking_show, mes_seleccionado, mostrar_opcion, meta_periodo, semanas_transcurridas
+        )
+        st.download_button(
+            label="📋 Solo Tabla de Datos (HTML)",
+            data=solo_tabla_html,
+            file_name=f"tabla_ranking_{mes_seleccionado.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.html",
+            mime="text/html",
+            use_container_width=True
+        )
 
-        except Exception as e:
-            st.sidebar.error(f"Error al generar PPTX: {e}")
+# ─── SIDEBAR - FILE UPLOADER Y FILTROS ─────────────────────────────────────
+with st.sidebar:
+    st.markdown("### ⚙️ Panel de Control")
+    uploaded = st.file_uploader("📂 Carga tu archivo Excel", type=["xlsx", "xls"])
+    
+    if uploaded is None:
+        st.info("👈 Carga un archivo Excel para comenzar")
+        st.stop()
+    
+    st.markdown("---")
+    st.markdown("### 🎯 Filtros")
+    
+    df, err = load_excel(uploaded.read())
+    if err: 
+        st.error(err)
+        st.stop()
+        
+    
+    # ✅ FILTRO DE VISITAS FÍSICAS (REGLAS DE NEGOCIO)
+    if "tipo_visita" in df.columns:
+        df = df[df["tipo_visita"] == "FÍSICA"].copy()
+        st.success("✅ Solo se consideran visitas FÍSICAS (regla comercial)")
+    else:
+        st.warning("⚠️ Columna 'tipo_visita' no encontrada. Verifica el archivo.")
+    
+    sel_mes = st.selectbox("📅 Periodo Mensual", ["Todos"] + sorted(df["mes"].unique().tolist()))
+    
+    df_temp = df.copy()
+    
+    if sel_mes != "Todos":
+        df_temp['sabado'] = df_temp['semana_inicio'] + pd.Timedelta(days=5)
+        df_temp['mes_sabado'] = df_temp['sabado'].dt.strftime("%B %Y")
+        df_f = df_temp[df_temp['mes_sabado'] == sel_mes].copy()
+        df_f = df_f.drop(columns=['sabado', 'mes_sabado'])
+    else:
+        df_f = df_temp.copy()
+    
+    semanas_temp = sorted(df_f["semana"].unique(), key=lambda x: int(x.split()[-1]))
+    lista_semanas = semanas_temp if len(semanas_temp) > 0 else []
+    sel_sem = st.selectbox("🗓️ Vista por Semana", ["Todas"] + lista_semanas)
+    
+    opciones_zona = sorted(df_f["zona"].dropna().unique().tolist())
+    if opciones_zona:
+        sel_zona = st.selectbox("🌎 Zona o Territorio", opciones_zona, index=0)
+        df_f = df_f[df_f["zona"] == sel_zona]
+    else:
+        sel_zona = None
+        st.warning("⚠️ No hay zonas disponibles en los datos")
+    
+    if sel_sem != "Todas": 
+        df_f = df_f[df_f["semana"] == sel_sem]
 
+if df_f.empty:
+    st.warning("⚠️ No hay datos con los filtros seleccionados. Ajusta los criterios.")
+    st.stop()
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# DETALLE DE VISITAS
-# ═══════════════════════════════════════════════════════════════════════════════
-st.markdown("## 📋 Detalle de Visitas")
-cols_mostrar = [COL_FECHA, COL_VENDEDOR, COL_ZONA, COL_REGION, COL_TIPO, COL_TIPO_VIS, COL_CLIENTE, COL_MOTIVO, COL_RESULTADO]
+# ─── SELECTOR DE PESTAÑAS ─────────────────────────────────────────────────
+tab1, tab2 = st.tabs(["📊 DASHBOARD", "🏆 RANKING"])
 
-def prep_detalle(df):
-    disponibles = [c for c in cols_mostrar if c in df.columns]
-    d = df[disponibles].copy()
-    if COL_FECHA in d.columns:
-        d[COL_FECHA] = d[COL_FECHA].dt.date
-        d = d.sort_values(COL_FECHA, ascending=False)
-    return d
+with tab1:
+    # ============================================================
+    # DASHBOARD CON METAS PERSONALIZADAS POR ZONA
+    # ============================================================
+    if sel_mes != "Todos" and sel_sem == "Todas":
+        num_semanas_visibles = len(df_f["semana"].unique())
+    else:
+        num_semanas_visibles = df_f["semana"].nunique()
 
-tdt, tdp, tdl = st.tabs(["🌎 Todos", "🏞️ Provincia", "🏙️ Lima"])
-with tdt:
-    st.dataframe(prep_detalle(dff), use_container_width=True, hide_index=True)
-with tdp:
-    if COL_REGION in dff.columns:
-        st.dataframe(prep_detalle(dff[dff[COL_REGION].str.upper() == "PROVINCIA"]), use_container_width=True, hide_index=True)
-with tdl:
-    if COL_REGION in dff.columns:
-        st.dataframe(prep_detalle(dff[dff[COL_REGION].str.upper() == "LIMA"]), use_container_width=True, hide_index=True)
+    zonas_activas = df_f["zona"].nunique()
+    
+    # ============================================================
+    # METAS SEGÚN ZONA (PERSONALIZADO)
+    # ============================================================
+    if sel_zona:
+        meta_diaria_zona, meta_semanal_zona = get_metas_zona(sel_zona)
+    else:
+        meta_diaria_zona, meta_semanal_zona = 5, 25
+    
+    if sel_sem == "Todas":
+        meta_actual = meta_semanal_zona * num_semanas_visibles * zonas_activas
+    else:
+        meta_actual = meta_semanal_zona
+
+    zona_badge = ""
+    if sel_zona:
+        tipo_zona_sel = CLASIFICACION_ZONAS.get(sel_zona.upper().strip(), "SIN CLASIFICAR")
+        zona_badge = f'<span class="zona-badge">📍 {tipo_zona_sel} - {sel_zona}</span>'
+
+    st.markdown(f'<div class="section-title">📊 Indicadores de Gestión {zona_badge}</div>', unsafe_allow_html=True)
+
+    total_v = len(df_f)
+    visitas_prospeccion = len(df_f[df_f["tipo"] == "PROSPECCIÓN"]) if "tipo" in df_f.columns else 0
+    visitas_mantenimiento = len(df_f[df_f["tipo"] == "MANTENIMIENTO"]) if "tipo" in df_f.columns else 0
+
+    # ============================================================
+    # CALCULAR META ACUMULADA SEGÚN EL DÍA (con meta personalizada)
+    # ============================================================
+    hoy = datetime.now()
+    dia_actual_num = hoy.weekday()
+    
+    if dia_actual_num == 1:  # Martes
+        meta_acumulada = meta_diaria_zona
+    elif dia_actual_num == 2:  # Miércoles
+        meta_acumulada = meta_diaria_zona * 2
+    elif dia_actual_num == 3:  # Jueves
+        meta_acumulada = meta_diaria_zona * 3
+    elif dia_actual_num == 4:  # Viernes
+        meta_acumulada = meta_diaria_zona * 4
+    else:
+        meta_acumulada = meta_semanal_zona
+    
+    # Calcular visitas acumuladas del día
+    lunes_actual = hoy - timedelta(days=dia_actual_num)
+    visitas_acumuladas = 0
+    for i in range(dia_actual_num + 1):
+        fecha_dia = lunes_actual + timedelta(days=i)
+        visitas = len(df_f[df_f["fecha"].dt.date == fecha_dia.date()])
+        visitas_acumuladas += visitas
+    
+    pct_avance = (visitas_acumuladas / meta_acumulada * 100) if meta_acumulada > 0 else 0
+    
+    # Calcular prospectos únicos para tasa de conversión
+    df_prospeccion_dash = df_f[df_f["tipo"] == "PROSPECCIÓN"] if "tipo" in df_f.columns else pd.DataFrame()
+    prospectos_unicos_dash = df_prospeccion_dash["Cliente o Prospecto"].nunique() if not df_prospeccion_dash.empty else 0
+    
+    if "Task" in df_f.columns:
+        cierres_dash = len(df_f[(df_f["tipo"] == "PROSPECCIÓN") & 
+                                  (df_f["Task"].str.upper().str.contains("CIERRE", na=False))])
+    else:
+        cierres_dash = 0
+    
+    tasa_conversion = (cierres_dash / prospectos_unicos_dash * 100) if prospectos_unicos_dash > 0 else 0
+    
+    # Colores según rendimiento
+    if pct_avance >= 80:
+        avance_color = "#16A34A"
+    elif pct_avance >= 50:
+        avance_color = "#F59E0B"
+    else:
+        avance_color = "#DC2626"
+    
+    # ============================================================
+    # 5 KPIs
+    # ============================================================
+    c1, c2, c3, c4, c5 = st.columns(5)
+
+    with c1: 
+        st.markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-label">Total Visitas</div>
+            <div class="kpi-value">{total_v}</div>
+            <div class="kpi-desglose">
+                🎯 Prospección = {visitas_prospeccion}<br>
+                🔧 Mantenimiento = {visitas_mantenimiento}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c2: 
+        st.markdown(f'<div class="kpi-card"><div class="kpi-label">Clientes Únicos</div><div class="kpi-value">{df_f["Cliente o Prospecto"].nunique()}</div></div>', unsafe_allow_html=True)
+
+    color_clase = "green" if total_v >= meta_actual else "red"
+    with c3: 
+        st.markdown(f'<div class="kpi-card {color_clase}"><div class="kpi-label">Meta del Periodo</div><div class="kpi-value">{total_v}/{meta_actual}</div></div>', unsafe_allow_html=True)
+    
+    with c4:
+        if visitas_acumuladas >= meta_acumulada:
+            color_avance_kpi = "#16A34A"
+        else:
+            color_avance_kpi = "#DC2626"
+        
+        st.markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-label">📈 % de Avance</div>
+            <div class="kpi-value" style="color: {color_avance_kpi};">{pct_avance:.1f}%</div>
+            <div class="kpi-desglose">
+                Meta: {meta_acumulada} visitas (acumulado)
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with c5:
+        st.markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-label">🎯 Cierres en la semana</div>
+            <div class="kpi-value">{cierres_dash}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ============================================================
+    # GRÁFICO + ALERTA
+    # ============================================================
+    col_grafico, col_alerta = st.columns([2, 1])
+    
+    with col_grafico:
+        st.markdown('<p class="section-title">📈 Análisis de Tendencia Semanal</p>', unsafe_allow_html=True)
+
+        if sel_sem == "Todas":
+            df_filtrada = df_f
+            df_graph_detalle = df_filtrada.groupby(["semana", "tipo"]).size().reset_index(name="visitas")
+            df_graph_pivot = df_graph_detalle.pivot(index="semana", columns="tipo", values="visitas").fillna(0).reset_index()
+            
+            if "PROSPECCIÓN" not in df_graph_pivot.columns:
+                df_graph_pivot["PROSPECCIÓN"] = 0
+            if "MANTENIMIENTO" not in df_graph_pivot.columns:
+                df_graph_pivot["MANTENIMIENTO"] = 0
+            
+            df_graph_pivot["Total"] = df_graph_pivot["PROSPECCIÓN"] + df_graph_pivot["MANTENIMIENTO"]
+            df_graph_pivot["hover_text"] = df_graph_pivot.apply(
+                lambda r: f"Total: {int(r['Total'])}<br>🎯 Prospección: {int(r['PROSPECCIÓN'])}<br>🔧 Mantenimiento: {int(r['MANTENIMIENTO'])}", axis=1
+            )
+            
+            semanas_rango = df_filtrada.groupby("semana")["semana_rango"].first().to_dict()
+            df_graph_pivot["semana_rango"] = df_graph_pivot["semana"].map(semanas_rango)
+            
+            fig = px.bar(df_graph_pivot, x="semana", y="Total", text="Total",
+                         color_discrete_sequence=["#CBD5E1"],
+                         hover_data={"hover_text": True, "semana_rango": True})
+            fig.add_hline(y=meta_semanal_zona, line_dash="dash", line_color="#1E293B", annotation_text=f"Meta {meta_semanal_zona}")
+            fig.update_traces(textposition='outside', hovertemplate="%{customdata[0]}<br>📅 %{customdata[1]}<extra></extra>",
+                              texttemplate='%{text:.0f}')
+            
+            data_alerts = df_graph_pivot.rename(columns={"semana": "semana", "Total": "visitas", "semana_rango": "semana_rango"})
+            meta_ref = meta_semanal_zona
+        else:
+            dias_es = {"Monday":"Lun", "Tuesday":"Mar", "Wednesday":"Mie", "Thursday":"Jue", "Friday":"Vie", "Saturday":"Sab", "Sunday":"Dom"}
+            
+            df_dia_detalle = df_f.groupby(["fecha", "dia_semana", "tipo"]).size().reset_index(name="visitas").sort_values("fecha")
+            df_dia_pivot = df_dia_detalle.pivot(index=["fecha", "dia_semana"], columns="tipo", values="visitas").fillna(0).reset_index()
+            
+            if "PROSPECCIÓN" not in df_dia_pivot.columns:
+                df_dia_pivot["PROSPECCIÓN"] = 0
+            if "MANTENIMIENTO" not in df_dia_pivot.columns:
+                df_dia_pivot["MANTENIMIENTO"] = 0
+            
+            df_dia_pivot["Total"] = df_dia_pivot["PROSPECCIÓN"] + df_dia_pivot["MANTENIMIENTO"]
+            df_dia_pivot["label"] = df_dia_pivot.apply(lambda r: f"{dias_es.get(r['dia_semana'])} {r['fecha'].strftime('%d/%m')}", axis=1)
+            df_dia_pivot["hover_text"] = df_dia_pivot.apply(
+                lambda r: f"Total: {int(r['Total'])}<br>🎯 Prospección: {int(r['PROSPECCIÓN'])}<br>🔧 Mantenimiento: {int(r['MANTENIMIENTO'])}", axis=1
+            )
+            
+            fig = px.bar(df_dia_pivot.sort_values("fecha"), x="label", y="Total", text="Total",
+                         color_discrete_sequence=["#CBD5E1"],
+                         hover_data={"hover_text": True})
+            fig.add_hline(y=meta_diaria_zona, line_dash="dash", line_color="#1E293B", annotation_text=f"Meta {meta_diaria_zona}")
+            fig.update_traces(textposition='outside', hovertemplate="%{customdata[0]}<extra></extra>",
+                              texttemplate='%{text:.0f}')
+            
+            data_alerts = df_dia_pivot.rename(columns={"label": "label", "Total": "visitas"})
+            meta_ref = meta_diaria_zona
+
+        fig.update_layout(height=380, bargap=0.5, margin=dict(t=20, b=20, l=20, r=20), 
+                          plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col_alerta:
+        if sel_zona and sel_sem != "Todas":
+            alerta_html = generar_alertas_simple(df_f, sel_zona, total_v)
+            if alerta_html:
+                st.markdown(alerta_html, unsafe_allow_html=True)
+        else:
+            st.markdown('<div style="height: 100%; display: flex; align-items: center; justify-content: center; padding: 20px; background: #F8FAFC; border-radius: 12px;"><span style="color: #94A3B8;">Selecciona una zona y semana para ver alertas</span></div>', unsafe_allow_html=True)
+
+    # ============================================================
+    # ALERTAS DE CUMPLIMIENTO (CON COLORES PERSONALIZADOS)
+    # ============================================================
+    st.markdown('<p class="section-title">🚦 Alertas de Cumplimiento</p>', unsafe_allow_html=True)
+    if not data_alerts.empty:
+        if sel_sem == "Todas":
+            num_alerts = len(data_alerts)
+            cols_a = st.columns(min(num_alerts, 4))
+            for i, (idx, row) in enumerate(data_alerts.iterrows()):
+                if i >= 4: break
+                cumple = row["visitas"] >= meta_semanal_zona
+                bg_color = "#DCFCE7" if cumple else "#FEE2E2"
+                color_text = "#16A34A" if cumple else "#DC2626"
+                
+                semana = row["semana"]
+                df_semana = df_filtrada[df_filtrada["semana"] == semana]
+                prospeccion_sem = len(df_semana[df_semana["tipo"] == "PROSPECCIÓN"])
+                mantenimiento_sem = len(df_semana[df_semana["tipo"] == "MANTENIMIENTO"])
+                
+                texto_semana = row["semana"]
+                rango_fechas = row["semana_rango"]
+                with cols_a[i]:
+                    st.markdown(f"""
+                    <div style="background:{bg_color}; border-radius:12px; padding:12px; text-align:center;">
+                        <div style="font-weight:700; font-size:11px;">{texto_semana}</div>
+                        <div style="font-size:11px; color:#64748B; margin-bottom:5px;">{rango_fechas}</div>
+                        <div style="font-size:28px; font-weight:800; color:{color_text};">{int(row['visitas'])}</div>
+                        <div style="font-size:11px; margin-top:8px; padding-top:5px; border-top:1px solid #E2E8F0;">
+                            🎯 Prospección = {prospeccion_sem}<br>
+                            🔧 Mantenimiento = {mantenimiento_sem}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+        else:
+            num_alerts = len(data_alerts)
+            cols_a = st.columns(num_alerts)
+            for i, (idx, row) in enumerate(data_alerts.iterrows()):
+                cumple = row["visitas"] >= meta_diaria_zona
+                bg_color = "#DCFCE7" if cumple else "#FEE2E2"
+                color_text = "#16A34A" if cumple else "#DC2626"
+                fecha = row["fecha"]
+                df_dia = df_f[df_f["fecha"] == fecha]
+                prospeccion_dia = len(df_dia[df_dia["tipo"] == "PROSPECCIÓN"])
+                mantenimiento_dia = len(df_dia[df_dia["tipo"] == "MANTENIMIENTO"])
+                with cols_a[i]:
+                    st.markdown(f"""
+                    <div style="background:{bg_color}; border-radius:12px; padding:12px; text-align:center;">
+                        <div style="font-weight:700; font-size:12px;">{row['label']}</div>
+                        <div style="font-size:28px; font-weight:800; color:{color_text};">{int(row['visitas'])}</div>
+                        <div style="font-size:11px; margin-top:8px; padding-top:5px; border-top:1px solid #E2E8F0;">
+                            🎯 Prospección = {prospeccion_dia}<br>
+                            🔧 Mantenimiento = {mantenimiento_dia}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)    
+
+    st.markdown('<p class="section-title">📋 Resumen Estratégico por Giro</p>', unsafe_allow_html=True)
+    df_resumen_giro = df_f.groupby("Giro").agg(
+        Clientes=("Cliente o Prospecto", "nunique"),
+        Visitas_Totales=("Cliente o Prospecto", "count")
+    ).reset_index()
+    df_resumen_giro["Frecuencia"] = (df_resumen_giro["Visitas_Totales"] / df_resumen_giro["Clientes"]).round(2)
+    st.dataframe(df_resumen_giro, use_container_width=True, hide_index=True)
+
+    st.markdown('<p class="section-title">🍩 Distribución de Visitas por Giro</p>', unsafe_allow_html=True)
+    visitas_por_giro = df_f.groupby("Giro").size().reset_index(name="Visitas").sort_values("Visitas", ascending=False)
+    colores_dona = ["#DC2626", "#F59E0B", "#10B981", "#3B82F6", "#8B5CF6", "#EC4899", "#06B6D4", "#84CC16"]
+    fig_dona_giro = go.Figure(data=[go.Pie(labels=visitas_por_giro["Giro"], values=visitas_por_giro["Visitas"], hole=0.45,
+                                            marker_colors=colores_dona[:len(visitas_por_giro)], textinfo='label+percent', textposition='auto')])
+    fig_dona_giro.update_layout(height=420, margin=dict(t=20, b=20, l=20, r=20), paper_bgcolor='white',
+                                annotations=[dict(text=f"Total<br>{len(df_f)}", x=0.5, y=0.5, font_size=16, 
+                                                  font_weight='bold', showarrow=False, font_color="#1E293B")])
+    st.plotly_chart(fig_dona_giro, use_container_width=True)
+
+    giro_top = visitas_por_giro.iloc[0]["Giro"]
+    visitas_top = visitas_por_giro.iloc[0]["Visitas"]
+    porcentaje_top = (visitas_top / len(df_f) * 100).round(1)
+    st.markdown(f"""
+    <div style="background-color: #F1F5F9; border-radius: 10px; padding: 12px; margin-top: 10px; text-align: center;">
+        <span style="font-size: 13px;">🎯 Giro con más visitas:</span>
+        <span style="font-size: 16px; font-weight: 700; color: #DC2626;">{giro_top}</span>
+        <span style="font-size: 13px;"> con {visitas_top} visitas ({porcentaje_top}% del total)</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if sel_zona:
+        st.markdown('<p class="section-title">📂 Detalle de Clientes por Giro</p>', unsafe_allow_html=True)
+        giros = [g for g in df_f["Giro"].unique() if pd.notna(g)]
+        if giros:
+            for i in range(0, len(giros), 2):
+                trozo = giros[i : i + 2]
+                cols = st.columns(2)
+                for j, giro_nombre in enumerate(trozo):
+                    with cols[j]:
+                        st.markdown(f'<div style="background:#F1F5F9; padding:8px 15px; border-radius:8px; border-left:4px solid #DC2626; margin-bottom:10px; font-weight:700;">📍 {giro_nombre}</div>', unsafe_allow_html=True)
+                        df_det = df_f[df_f["Giro"] == giro_nombre].groupby("Cliente o Prospecto").size().reset_index(name="Visitas").sort_values("Visitas", ascending=False)
+                        st.dataframe(df_det, use_container_width=True, hide_index=True, height=200)
+
+        # ============================================================
+        # EMBUDO DE VENTAS
+        # ============================================================
+        st.markdown('<p class="section-title">📈 EMBUDO DE VENTAS - Conversión y Velocidad</p>', unsafe_allow_html=True)
+        
+        etapas = ["PROSPECCIÓN", "CALIFICACIÓN DE LEADS", "VISITA", "PROPUESTA", "NEGOCIACIÓN", "CIERRE"]
+        
+        orden_etapas = {
+            "PROSPECCIÓN": 1,
+            "CALIFICACIÓN DE LEADS": 2,
+            "VISITA": 3,
+            "PROPUESTA": 4,
+            "NEGOCIACIÓN": 5,
+            "CIERRE": 6
+        }
+        
+        colores_embudo = {
+            "PROSPECCIÓN": "#DC2626",
+            "CALIFICACIÓN DE LEADS": "#F59E0B",
+            "VISITA": "#3B82F6",
+            "PROPUESTA": "#10B981",
+            "NEGOCIACIÓN": "#8B5CF6",
+            "CIERRE": "#16A34A"
+        }
+        
+        df_embudo = df.copy()
+        
+        if sel_zona:
+            df_embudo = df_embudo[df_embudo["zona"] == sel_zona]
+        
+        fecha_inicio = datetime(2026, 4, 1)
+        if "fecha" in df_embudo.columns:
+            df_embudo["fecha_dt"] = pd.to_datetime(df_embudo["fecha"])
+            df_embudo = df_embudo[df_embudo["fecha_dt"] >= fecha_inicio]
+        
+        semanas_filtro = []
+        if sel_sem != "Todas":
+            semanas_filtro = [sel_sem]
+        elif sel_mes != "Todos":
+            semanas_filtro = df_f["semana"].unique().tolist() if not df_f.empty else []
+        
+        fecha_actual = datetime.now()
+        df_semanas_cliente = df_embudo.groupby("Cliente o Prospecto")["semana"].apply(list).to_dict()
+        
+        df_cliente_etapas = df_embudo.groupby("Cliente o Prospecto").agg({
+            "Task": lambda x: list(x),
+            "fecha_dt": ["min", "max"]
+        }).reset_index()
+        df_cliente_etapas.columns = ["Cliente o Prospecto", "etapas", "fecha_registro", "fecha_ultima"]
+        
+        cliente_etapa_final = {}
+        for _, row in df_cliente_etapas.iterrows():
+            nombre = row["Cliente o Prospecto"]
+            etapas_cliente = row["etapas"]
+            etapa_max = max(etapas_cliente, key=lambda x: orden_etapas.get(x, 0))
+            cliente_etapa_final[nombre] = etapa_max
+        
+        visitas_por_cliente = df_embudo.groupby("Cliente o Prospecto").size().to_dict()
+        
+        clientes_data = {}
+        for _, row in df_cliente_etapas.iterrows():
+            nombre = row["Cliente o Prospecto"]
+            fecha_reg = row["fecha_registro"]
+            fecha_ult = row["fecha_ultima"]
+            
+            clientes_data[nombre] = {
+                "fecha_registro": fecha_reg,
+                "fecha_ultima": fecha_ult,
+                "etapa_final": cliente_etapa_final[nombre],
+                "visitas": visitas_por_cliente.get(nombre, 1)
+            }
+        
+        datos_etapas = []
+        
+        for etapa in etapas:
+            clientes_en_etapa = []
+            
+            for nombre, data in clientes_data.items():
+                if data["etapa_final"] == etapa:
+                    dias_en_etapa = (fecha_actual - data["fecha_registro"]).days
+                    
+                    if pd.notna(data["fecha_ultima"]):
+                        dias_sin_visita = (fecha_actual - data["fecha_ultima"]).days
+                        fecha_ultima_str = data["fecha_ultima"].strftime("%d/%m/%Y")
+                    else:
+                        dias_sin_visita = 999
+                        fecha_ultima_str = "N/A"
+                    
+                    fecha_reg_str = data["fecha_registro"].strftime("%d/%m/%Y")
+                    visitas = data["visitas"]
+                    
+                    semanas_cliente = df_semanas_cliente.get(nombre, [])
+                    visitado_semana = "✅ Sí" if any(sem in semanas_filtro for sem in semanas_cliente) else "❌ No"
+                    
+                    if dias_en_etapa <= 30:
+                        temperatura = "🔥 Caliente"
+                    elif dias_en_etapa <= 60:
+                        temperatura = "🟡 Tibio"
+                    else:
+                        temperatura = "❄️ Frío"
+                    
+                    clientes_en_etapa.append({
+                        "nombre": nombre,
+                        "fecha_reg": fecha_reg_str,
+                        "dias": dias_en_etapa,
+                        "visitas": visitas,
+                        "fecha_ultima": fecha_ultima_str,
+                        "dias_sin_visita": dias_sin_visita,
+                        "visitado_semana": visitado_semana,
+                        "temperatura": temperatura
+                    })
+            
+            if clientes_en_etapa:
+                dias_prom = round(sum(c["dias"] for c in clientes_en_etapa) / len(clientes_en_etapa))
+                clientes_en_etapa.sort(key=lambda x: x["dias"], reverse=True)
+                top5 = clientes_en_etapa[:5]
+                total_rest = len(clientes_en_etapa) - 5
+                urgentes = sum(1 for c in clientes_en_etapa if c["dias_sin_visita"] > 15)
+                
+                tooltip_lines = [
+                    f"📊 Total: {len(clientes_en_etapa)} prospectos | ⏱️ Promedio: {dias_prom} días | 🔴 Urgentes: {urgentes}",
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+                    "🔥 Los más antiguos (prioridad):"
+                ]
+                for c in top5:
+                    tooltip_lines.append(f"• {c['nombre']} - {c['dias']} días | {c['visitas']} visitas | {c['visitado_semana']}")
+                if total_rest > 0:
+                    tooltip_lines.append(f"... y {total_rest} más. Ver detalle completo abajo.")
+                
+                tooltip_text = "\n".join(tooltip_lines)
+                clientes_vista = ", ".join([f"{c['nombre']} ({c['fecha_reg']})" for c in clientes_en_etapa[:3]])
+                if len(clientes_en_etapa) > 3:
+                    clientes_vista += f" (+{len(clientes_en_etapa)-3})"
+            else:
+                dias_prom = 0
+                tooltip_text = "Sin prospectos en esta etapa"
+                clientes_vista = "Sin prospectos"
+                clientes_en_etapa = []
+            
+            datos_etapas.append({
+                "etapa": etapa,
+                "cantidad": len(clientes_en_etapa),
+                "dias_prom": dias_prom,
+                "tooltip_text": tooltip_text,
+                "clientes_vista": clientes_vista,
+                "clientes_detalle": clientes_en_etapa
+            })
+        
+        total_prospectos = sum(d["cantidad"] for d in datos_etapas) if datos_etapas else 1
+        
+        for d in datos_etapas:
+            d["porcentaje"] = (d["cantidad"] / total_prospectos * 100) if total_prospectos > 0 else 0
+        
+        for i, d in enumerate(datos_etapas):
+            color = colores_embudo[d["etapa"]]
+            anchos = [90, 80, 70, 60, 50, 40]
+            ancho = anchos[i] if i < len(anchos) else 50
+            
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                st.markdown(f"""
+                <div style="width: {ancho}%; margin: 0 auto 15px auto;">
+                    <div title="{d['tooltip_text']}" style="background: white; border-left: 5px solid {color}; border-radius: 12px; padding: 15px 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); cursor: help;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="font-size: 16px; font-weight: 700; color: {color};">{d['etapa']}</span>
+                            <span style="font-size: 24px; font-weight: 800; color: {color};">{d['cantidad']}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                            <span style="font-size: 12px; color: #64748B;">{d['porcentaje']:.0f}% del total</span>
+                            <span style="font-size: 12px; color: #94A3B8;">⏱️ {d['dias_prom']} días</span>
+                        </div>
+                        <div style="padding-top: 8px; border-top: 1px solid #E2E8F0; font-size: 12px; color: #475569;">
+                            <strong>📋 Clientes:</strong><br>
+                            <span>{d['clientes_vista']}</span>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                if i < len(etapas) - 1:
+                    st.markdown('<div style="text-align: center; font-size: 24px; color: #CBD5E1; margin: -5px 0 5px 0;">▼</div>', unsafe_allow_html=True)
+        
+        with st.expander("📋 Ver detalle completo de todos los prospectos por etapa"):
+            for d in datos_etapas:
+                if d["clientes_detalle"]:
+                    st.markdown(f"### {d['etapa']} - {len(d['clientes_detalle'])} prospectos")
+                    df_detalle = pd.DataFrame([
+                        {
+                            "Prospecto": c["nombre"],
+                            "Fecha registro": c["fecha_reg"],
+                            "Días en etapa": c["dias"],
+                            "Total visitas": c["visitas"],
+                            "Última visita": c["fecha_ultima"],
+                            "Días sin visita": c["dias_sin_visita"],
+                            "Visitado esta semana": c["visitado_semana"],
+                            "Temperatura": c["temperatura"]
+                        }
+                        for c in d["clientes_detalle"]
+                    ])
+                    st.dataframe(df_detalle, use_container_width=True, hide_index=True)
+                    st.markdown("---")
+                else:
+                    st.markdown(f"### {d['etapa']} - Sin prospectos")
+                    st.markdown("---")
+        
+        st.markdown("### 🚦 Alertas por Etapa")
+        alertas_embudo = []
+        for i in range(len(etapas) - 1):
+            cant_actual = datos_etapas[i]["cantidad"]
+            cant_siguiente = datos_etapas[i + 1]["cantidad"]
+            if cant_actual > 0 and cant_siguiente == 0:
+                alertas_embudo.append(f"🔴 **{etapas[i]} → {etapas[i+1]}**: {cant_actual} prospectos no han avanzado")
+            elif cant_actual > 0 and cant_siguiente < (cant_actual * 0.3):
+                pct = (cant_siguiente / cant_actual * 100) if cant_actual > 0 else 0
+                alertas_embudo.append(f"🟡 **{etapas[i]} → {etapas[i+1]}**: Solo {cant_siguiente} de {cant_actual} avanzaron ({pct:.0f}%)")
+        
+        for d in datos_etapas:
+            if d["dias_prom"] > 15 and d["cantidad"] > 0:
+                alertas_embudo.append(f"🟡 **{d['etapa']}**: Prospectos llevan promedio {d['dias_prom']} días (recomendado <15 días)")
+        
+        total_prospectos_general = sum(d["cantidad"] for d in datos_etapas)
+        if datos_etapas[-1]["cantidad"] == 0 and total_prospectos_general > 0:
+            alertas_embudo.append(f"🔴 **CIERRE**: {total_prospectos_general} prospectos en el embudo, 0 cierres")
+        
+        if alertas_embudo:
+            for a in alertas_embudo[:8]:
+                st.markdown(f"- {a}")
+        else:
+            st.success("✅ No hay alertas activas en el embudo de ventas")
+
+    # ============================================================
+    # BOTÓN DE DESCARGA DE REPORTE (dentro del sidebar)
+    # ============================================================
+    if sel_zona and sel_sem != "Todas" and 'total_v' in dir():
+        st.markdown("---")
+        st.markdown("### 📥 Descargar Reporte")
+        
+        # Calcular cierres y prospectos únicos
+        cierres_zona = 0
+        prospectos_unicos_zona = 0
+        if "Task" in df_f.columns:
+            cierres_zona = len(df_f[(df_f["tipo"] == "PROSPECCIÓN") & 
+                                    (df_f["Task"].str.upper().str.contains("CIERRE", na=False))])
+        if "tipo" in df_f.columns:
+            df_prospeccion_zona = df_f[df_f["tipo"] == "PROSPECCIÓN"]
+            prospectos_unicos_zona = df_prospeccion_zona["Cliente o Prospecto"].nunique() if not df_prospeccion_zona.empty else 0
+        
+        # Generar mensaje de alerta
+        mensaje_reporte = f"Reporte de gestión comercial para la zona {sel_zona}"
+        if 'alerta_html' in locals() and alerta_html:
+            mensaje_reporte = alerta_html
+        
+        # Generar HTML (asegúrate de tener df_resumen_giro, data_alerts, etc.)
+        reporte_html = generar_reporte_html(
+            df_f, sel_zona, total_v, 
+            visitas_prospeccion, visitas_mantenimiento, 
+            meta_actual, data_alerts, df_resumen_giro, 
+            mensaje_reporte, sel_sem,
+            cierres_zona, prospectos_unicos_zona
+        )
+        
+        st.download_button(
+            label="📥 Descargar Reporte (HTML)",
+            data=reporte_html,
+            file_name=f"reporte_{sel_zona}_{datetime.now().strftime('%Y%m%d_%H%M')}.html",
+            mime="text/html",
+            use_container_width=True
+        )    
+    
+
+with tab2:
+    mostrar_pagina_ranking(df)
+
+st.markdown('<div style="text-align:center; color:#94A3B8; font-size:12px; margin-top:40px; padding:20px; border-top:1px solid #E2E8F0;">Go To Market SAC · Dashboard Comercial · ' + str(datetime.now().year) + '</div>', unsafe_allow_html=True)
