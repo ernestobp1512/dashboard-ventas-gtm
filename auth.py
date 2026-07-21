@@ -138,6 +138,15 @@ def show_login() -> bool:
         color: #1E293B !important;
         outline: none !important;
     }
+    
+    /* ── Autocomplete/Autofill fix para contraste ── */
+    .stTextInput input:-webkit-autofill,
+    .stTextInput input:-webkit-autofill:hover, 
+    .stTextInput input:-webkit-autofill:focus, 
+    .stTextInput input:-webkit-autofill:active {
+        -webkit-box-shadow: 0 0 0 30px white inset !important;
+        -webkit-text-fill-color: #1E293B !important;
+    }
 
     /* ── Label del campo ── */
     .stTextInput label, .stTextInput label p {
@@ -260,13 +269,14 @@ def logout() -> None:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SIDEBAR CON INFORMACIÓN DE USUARIO (para páginas wrapper)
+# SIDEBAR CON NAVEGACIÓN Y PERFIL DE USUARIO
 # ══════════════════════════════════════════════════════════════════════════════
 
 def show_sidebar_user() -> None:
     """
-    Muestra en el sidebar: tarjeta de usuario + botón de logout.
-    Llamar desde cada página wrapper ANTES de exec() del dashboard.
+    Oculta el menú nativo, dibuja un menú personalizado y muestra 
+    la tarjeta de usuario + botón de logout.
+    Llamar desde cada página (app.py y wrappers).
     """
     user = get_current_user()
     if not user:
@@ -274,6 +284,26 @@ def show_sidebar_user() -> None:
 
     info = USERS[user]
     with st.sidebar:
+        # 1. Ocultar el menú de navegación nativo
+        st.markdown(
+            """<style>[data-testid="stSidebarNav"] {display: none !important;}</style>""", 
+            unsafe_allow_html=True
+        )
+
+        # 2. Menú de navegación personalizado
+        st.markdown(
+            "<div style='font-size:11px;color:#94A3B8;font-weight:700;letter-spacing:1px;margin-bottom:10px;'>MENÚ PRINCIPAL</div>", 
+            unsafe_allow_html=True
+        )
+        st.page_link("app.py", label="Inicio", icon="🏠")
+        
+        for key in info["access"]:
+            p = PAGE_INFO[key]
+            st.page_link(p["page"], label=p["label"], icon=p["icon"])
+
+        st.markdown("<hr style='margin:16px 0;border-color:#E2E8F0;'>", unsafe_allow_html=True)
+
+        # 3. Tarjeta de Sesión Activa
         st.markdown(f"""
         <div style="
             background: linear-gradient(135deg,#FFF1F1,#FFE4E4);
@@ -292,8 +322,5 @@ def show_sidebar_user() -> None:
         </div>
         """, unsafe_allow_html=True)
 
-        if st.button("🚪 Cerrar sesión", use_container_width=True,
-                     key="_sidebar_logout"):
+        if st.button("🚪 Cerrar sesión", use_container_width=True, key="_sidebar_logout"):
             logout()
-
-        st.divider()

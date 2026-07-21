@@ -115,17 +115,8 @@ user_info = auth.USERS[user]
 pages     = auth.get_user_pages()
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown(
-        f'<div style="background:linear-gradient(135deg,#FFF1F1,#FFE4E4);'
-        f'border:1px solid #FECACA;border-radius:12px;padding:14px 16px;margin-bottom:10px;">'
-        f'<div style="font-size:10px;color:#DC2626;font-weight:700;text-transform:uppercase;letter-spacing:1px;">SESIÓN ACTIVA</div>'
-        f'<div style="font-size:15px;font-weight:700;color:#1E293B;margin-top:4px;">👤 {user_info["name"]}</div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-    if st.button("🚪 Cerrar sesión", use_container_width=True, key="_welcome_logout"):
-        auth.logout()
+auth.show_sidebar_user()
+
 
 # ── Header ────────────────────────────────────────────────────────────────────
 st.markdown("""
