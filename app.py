@@ -16,90 +16,91 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# ─── CSS GLOBAL (bienvenida) ──────────────────────────────────────────────────
+# ─── CSS GLOBAL ──────────────────────────────────────────────────────────────
+# IMPORTANTE: definir TODOS los estilos aquí.
+# Los st.markdown() del cuerpo usan clases cortas sin estilos inline multilínea.
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
+.main { background: linear-gradient(145deg,#F0F4FF 0%,#F8FAFC 55%,#FFF5F5 100%) !important; }
 
-/* Fondo degradado suave */
-.main {
-    background: linear-gradient(145deg, #F0F4FF 0%, #F8FAFC 50%, #FFF5F5 100%) !important;
-    min-height: 100vh;
-}
-
-/* ── Header ── */
+/* ── Header principal ── */
 .gtm-header {
-    background: white;
-    border-radius: 20px;
-    padding: 30px 40px;
-    border: 1px solid #E2E8F0;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.06);
-    margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    background: white; border-radius: 20px; padding: 28px 36px;
+    border: 1px solid #E2E8F0; box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+    margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;
 }
-.gtm-brand-title {
-    font-size: 46px;
-    font-weight: 900;
-    color: #0F172A;
-    letter-spacing: -2.5px;
-    line-height: 1;
+.gtm-brand-title { font-size: 44px; font-weight: 900; color: #0F172A; letter-spacing: -2.5px; line-height: 1; }
+.gtm-brand-sub   { font-size: 19px; font-weight: 700; color: #0F172A; margin-top: 4px; }
+.gtm-bars        { display: flex; align-items: flex-end; gap: 7px; }
+.gtm-bar1 { width:13px; height:22px; background:#DC2626; border-radius:3px; opacity:0.55; }
+.gtm-bar2 { width:13px; height:38px; background:#DC2626; border-radius:3px; opacity:0.78; }
+.gtm-bar3 { width:13px; height:54px; background:#DC2626; border-radius:3px; }
+.gtm-header-right { text-align: right; }
+.gtm-header-label { font-size: 11px; color: #94A3B8; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
+.gtm-header-year  { font-size: 22px; font-weight: 800; color: #1E293B; margin-top: 2px; }
+
+/* ── Barra de bienvenida ── */
+.welcome-bar {
+    background: linear-gradient(135deg,#1E293B,#0F172A); border-radius: 16px;
+    padding: 20px 28px; margin-bottom: 28px;
+    display: flex; align-items: center; justify-content: space-between;
 }
-.gtm-brand-sub {
-    font-size: 20px;
-    font-weight: 700;
-    color: #0F172A;
-    margin-top: 4px;
+.welcome-name { font-size: 22px; font-weight: 800; color: white; letter-spacing: -0.4px; }
+.welcome-sub  { font-size: 13px; color: #94A3B8; margin-top: 5px; }
+.welcome-badge {
+    background: rgba(220,38,38,0.15); border: 1px solid rgba(220,38,38,0.35);
+    border-radius: 50px; padding: 8px 18px; font-size: 13px; font-weight: 700; color: #FCA5A5;
 }
 
-/* ── Barra de estado de usuario ── */
-.user-bar {
-    background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
-    border-radius: 14px;
-    padding: 16px 24px;
-    margin-bottom: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    color: white;
+/* ── Tarjetas ── */
+.card-chip {
+    display: inline-block; border-radius: 20px; padding: 4px 12px;
+    font-size: 10px; font-weight: 700; letter-spacing: 1.2px;
+    text-transform: uppercase; margin-bottom: 14px;
 }
+.chip-lima     { background:#FFF1F1; color:#DC2626; }
+.chip-norte    { background:#EFF6FF; color:#2563EB; }
+.chip-provincia{ background:#F0FDF4; color:#16A34A; }
 
-/* ── Tarjetas de dashboard ── */
-.dash-card-wrap {
-    animation: fadeUp 0.4s ease both;
+.card-icon {
+    display: flex; align-items: center; justify-content: center;
+    width: 72px; height: 72px; border-radius: 18px;
+    font-size: 36px; margin-bottom: 16px;
 }
-@keyframes fadeUp {
-    from { opacity: 0; transform: translateY(16px); }
-    to   { opacity: 1; transform: translateY(0); }
-}
+.icon-lima     { background:#FFF1F1; border: 2px solid rgba(220,38,38,0.13); }
+.icon-norte    { background:#EFF6FF; border: 2px solid rgba(37,99,235,0.13); }
+.icon-provincia{ background:#F0FDF4; border: 2px solid rgba(22,163,74,0.13); }
 
-/* Botones de las tarjetas */
+.card-title { font-size: 20px; font-weight: 800; margin-bottom: 8px; letter-spacing: -0.3px; }
+.title-lima     { color: #DC2626; }
+.title-norte    { color: #2563EB; }
+.title-provincia{ color: #16A34A; }
+
+.card-desc { font-size: 13px; color: #64748B; line-height: 1.6; margin-bottom: 20px; }
+
+/* ── Botones de tarjeta (primary) ── */
 div[data-testid="stButton"] > button[kind="primary"] {
-    border-radius: 10px !important;
-    font-weight: 700 !important;
-    font-size: 14px !important;
-    padding: 10px !important;
-    border: none !important;
+    border-radius: 10px !important; font-weight: 700 !important;
+    font-size: 14px !important; padding: 10px !important; border: none !important;
     transition: transform 0.15s, box-shadow 0.15s !important;
 }
 div[data-testid="stButton"] > button[kind="primary"]:hover {
-    transform: translateY(-1px) !important;
+    transform: translateY(-1px) !important; opacity: 0.9 !important;
 }
 
-/* Logout sidebar */
-div[data-testid="stButton"] > button[kind="secondary"] {
-    border-radius: 8px !important;
-    font-weight: 600 !important;
+/* ── Footer ── */
+.gtm-footer {
+    margin-top: 48px; padding-top: 20px; border-top: 1px solid #E2E8F0;
+    display: flex; align-items: center; justify-content: space-between;
 }
+.gtm-footer-left  { font-size: 12px; color: #94A3B8; }
+.gtm-footer-right { font-size: 11px; color: #CBD5E1; }
 
-/* Quitar doble borde en cualquier input de esta página */
+/* ── Quitar doble borde Streamlit en inputs ── */
 .stTextInput [data-baseweb="input"],
-.stTextInput [data-baseweb="base-input"] {
-    box-shadow: none !important;
-    border: none !important;
-}
+.stTextInput [data-baseweb="base-input"] { box-shadow: none !important; border: none !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -108,219 +109,124 @@ if not st.session_state.get("auth_ok"):
     if not auth.show_login():
         st.stop()
 
-# ─── SESIÓN VÁLIDA — PANTALLA DE BIENVENIDA ──────────────────────────────────
+# ─── SESIÓN VÁLIDA ────────────────────────────────────────────────────────────
 user      = auth.get_current_user()
 user_info = auth.USERS[user]
 pages     = auth.get_user_pages()
 
-# ── Sidebar: usuario + logout ─────────────────────────────────────────────────
+# ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown(f"""
-    <div style="
-        background: linear-gradient(135deg,#FFF1F1,#FFE4E4);
-        border: 1px solid #FECACA;
-        border-radius: 12px;
-        padding: 14px 16px;
-        margin-bottom: 10px;
-    ">
-        <div style="font-size:10px;color:#DC2626;font-weight:700;
-                    text-transform:uppercase;letter-spacing:1px;">SESIÓN ACTIVA</div>
-        <div style="font-size:15px;font-weight:700;color:#1E293B;margin-top:4px;">
-            👤 {user_info['name']}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="background:linear-gradient(135deg,#FFF1F1,#FFE4E4);'
+        f'border:1px solid #FECACA;border-radius:12px;padding:14px 16px;margin-bottom:10px;">'
+        f'<div style="font-size:10px;color:#DC2626;font-weight:700;text-transform:uppercase;letter-spacing:1px;">SESIÓN ACTIVA</div>'
+        f'<div style="font-size:15px;font-weight:700;color:#1E293B;margin-top:4px;">👤 {user_info["name"]}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
     if st.button("🚪 Cerrar sesión", use_container_width=True, key="_welcome_logout"):
         auth.logout()
 
-# ── Header principal ──────────────────────────────────────────────────────────
-st.markdown(f"""
+# ── Header ────────────────────────────────────────────────────────────────────
+st.markdown("""
 <div class="gtm-header">
-    <div style="display:flex; align-items:center; gap:24px;">
-        <div style="display:flex; align-items:flex-end; gap:7px;">
-            <div style="width:13px;height:22px;background:#DC2626;border-radius:3px;opacity:0.6;"></div>
-            <div style="width:13px;height:38px;background:#DC2626;border-radius:3px;opacity:0.8;"></div>
-            <div style="width:13px;height:54px;background:#DC2626;border-radius:3px;"></div>
-        </div>
-        <div>
-            <div class="gtm-brand-title">Go To Market SAC</div>
-            <div class="gtm-brand-sub">
-                go<span style="color:#DC2626;">to</span>market
-            </div>
-        </div>
-    </div>
-    <div style="text-align:right;">
-        <div style="font-size:11px;color:#94A3B8;font-weight:600;
-                    letter-spacing:1.5px;text-transform:uppercase;">
-            Portal Comercial
-        </div>
-        <div style="font-size:22px;font-weight:800;color:#1E293B;margin-top:2px;">
-            Dashboard 2026
-        </div>
-    </div>
+<div style="display:flex;align-items:center;gap:24px;">
+<div class="gtm-bars"><div class="gtm-bar1"></div><div class="gtm-bar2"></div><div class="gtm-bar3"></div></div>
+<div><div class="gtm-brand-title">Go To Market SAC</div>
+<div class="gtm-brand-sub">go<span style="color:#DC2626;">to</span>market</div></div>
+</div>
+<div class="gtm-header-right">
+<div class="gtm-header-label">Portal Comercial</div>
+<div class="gtm-header-year">Dashboard 2026</div>
+</div>
 </div>
 """, unsafe_allow_html=True)
 
-# ── Bienvenida personalizada ──────────────────────────────────────────────────
-num_pages  = len(pages)
-label_dash = "dashboard" if num_pages == 1 else "dashboards"
+# ── Bienvenida ────────────────────────────────────────────────────────────────
+num   = len(pages)
+label = "dashboard" if num == 1 else "dashboards"
+st.markdown(
+    f'<div class="welcome-bar">'
+    f'<div><div class="welcome-name">👋 Bienvenido, {user_info["name"]}</div>'
+    f'<div class="welcome-sub">Tienes acceso a <b style="color:#FCA5A5;">{num} {label}</b>. Selecciona el que deseas abrir.</div></div>'
+    f'<div class="welcome-badge">📅 2026</div>'
+    f'</div>',
+    unsafe_allow_html=True,
+)
 
-st.markdown(f"""
-<div style="
-    background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
-    border-radius: 16px;
-    padding: 22px 28px;
-    margin-bottom: 30px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-">
-    <div>
-        <div style="font-size:22px;font-weight:800;color:white;letter-spacing:-0.5px;">
-            👋 Bienvenido, {user_info['name']}
-        </div>
-        <div style="font-size:13px;color:#94A3B8;margin-top:5px;">
-            Tienes acceso a <b style="color:#FCA5A5;">{num_pages} {label_dash}</b>.
-            Selecciona el que deseas abrir.
-        </div>
-    </div>
-    <div style="
-        background: rgba(220,38,38,0.15);
-        border: 1px solid rgba(220,38,38,0.3);
-        border-radius: 50px;
-        padding: 8px 18px;
-        font-size: 13px;
-        font-weight: 700;
-        color: #FCA5A5;
-    ">
-        📅 2026
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-# ── Tarjetas de dashboards ────────────────────────────────────────────────────
-CARD_CONFIG = {
+# ── Tarjetas ──────────────────────────────────────────────────────────────────
+CARDS = {
     "lima": {
-        "icon":       "🏙️",
-        "title":      "Dashboard Lima",
-        "subtitle":   "REGIÓN LIMA",
-        "desc":       "Seguimiento de visitas, prospección y mantenimiento de la región Lima.",
-        "color":      "#DC2626",
-        "bg":         "#FFF1F1",
-        "btn_color":  "#DC2626",
-        "page":       "pages/1_Lima.py",
-        "delay":      "0.0s",
+        "chip_class":  "chip-lima",
+        "icon_class":  "icon-lima",
+        "title_class": "title-lima",
+        "subtitle":    "REGIÓN LIMA",
+        "icon":        "🏙️",
+        "title":       "Dashboard Lima",
+        "desc":        "Seguimiento de visitas, prospección y mantenimiento de la región Lima.",
+        "page":        "pages/1_Lima.py",
     },
     "norte": {
-        "icon":       "🌄",
-        "title":      "Dashboard Norte",
-        "subtitle":   "REGIÓN NORTE",
-        "desc":       "Gestión comercial y embudo de ventas para la región Norte del país.",
-        "color":      "#2563EB",
-        "bg":         "#EFF6FF",
-        "btn_color":  "#2563EB",
-        "page":       "pages/2_Norte.py",
-        "delay":      "0.1s",
+        "chip_class":  "chip-norte",
+        "icon_class":  "icon-norte",
+        "title_class": "title-norte",
+        "subtitle":    "REGIÓN NORTE",
+        "icon":        "🌄",
+        "title":       "Dashboard Norte",
+        "desc":        "Gestión comercial y embudo de ventas para la región Norte del país.",
+        "page":        "pages/2_Norte.py",
     },
     "provincia": {
-        "icon":       "🗺️",
-        "title":      "Dashboard Provincia",
-        "subtitle":   "REGIÓN PROVINCIA",
-        "desc":       "Control de indicadores y alertas de cumplimiento para Provincia.",
-        "color":      "#16A34A",
-        "bg":         "#F0FDF4",
-        "btn_color":  "#16A34A",
-        "page":       "pages/3_Provincia.py",
-        "delay":      "0.2s",
+        "chip_class":  "chip-provincia",
+        "icon_class":  "icon-provincia",
+        "title_class": "title-provincia",
+        "subtitle":    "REGIÓN PROVINCIA",
+        "icon":        "🗺️",
+        "title":       "Dashboard Provincia",
+        "desc":        "Control de indicadores y alertas de cumplimiento para Provincia.",
+        "page":        "pages/3_Provincia.py",
     },
 }
 
 if pages:
     cols = st.columns(len(pages), gap="large")
     for i, page_key in enumerate(pages):
-        cfg = CARD_CONFIG[page_key]
+        c = CARDS[page_key]
         with cols[i]:
-            # Animación escalonada por tarjeta
-            st.markdown(f"""
-            <style>
-            .card-{page_key} {{
-                animation: fadeUp 0.45s ease {cfg['delay']} both;
-            }}
-            @keyframes fadeUp {{
-                from {{ opacity:0; transform:translateY(20px); }}
-                to   {{ opacity:1; transform:translateY(0); }}
-            }}
-            </style>
-            <div class="card-{page_key}"></div>
-            """, unsafe_allow_html=True)
-
             with st.container(border=True):
-                st.markdown(f"""
-                <div style="padding: 6px 0 16px 0;">
-                    <!-- Chip de región -->
-                    <div style="
-                        display: inline-block;
-                        background: {cfg['bg']};
-                        color: {cfg['color']};
-                        font-size: 10px;
-                        font-weight: 700;
-                        letter-spacing: 1.2px;
-                        text-transform: uppercase;
-                        border-radius: 20px;
-                        padding: 4px 12px;
-                        margin-bottom: 16px;
-                    ">{cfg['subtitle']}</div>
-
-                    <!-- Icono -->
-                    <div style="
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        width: 72px; height: 72px;
-                        background: {cfg['bg']};
-                        border-radius: 18px;
-                        font-size: 36px;
-                        margin-bottom: 16px;
-                        border: 2px solid {cfg['color']}22;
-                    ">{cfg['icon']}</div>
-
-                    <!-- Título -->
-                    <div style="
-                        font-size: 20px;
-                        font-weight: 800;
-                        color: {cfg['color']};
-                        margin-bottom: 8px;
-                        letter-spacing: -0.3px;
-                    ">{cfg['title']}</div>
-
-                    <!-- Descripción -->
-                    <div style="
-                        font-size: 13px;
-                        color: #64748B;
-                        line-height: 1.6;
-                        margin-bottom: 20px;
-                    ">{cfg['desc']}</div>
-                </div>
-                """, unsafe_allow_html=True)
-
+                # Chip de región — HTML simple, una sola línea
+                st.markdown(
+                    f'<div class="card-chip {c["chip_class"]}">{c["subtitle"]}</div>',
+                    unsafe_allow_html=True,
+                )
+                # Icono
+                st.markdown(
+                    f'<div class="card-icon {c["icon_class"]}">{c["icon"]}</div>',
+                    unsafe_allow_html=True,
+                )
+                # Título
+                st.markdown(
+                    f'<div class="card-title {c["title_class"]}">{c["title"]}</div>',
+                    unsafe_allow_html=True,
+                )
+                # Descripción
+                st.markdown(
+                    f'<div class="card-desc">{c["desc"]}</div>',
+                    unsafe_allow_html=True,
+                )
                 # Botón de navegación
                 if st.button(
-                    f"Abrir {cfg['title']} →",
+                    f"Abrir {c['title']} →",
                     key=f"goto_{page_key}",
                     use_container_width=True,
                     type="primary",
                 ):
-                    st.switch_page(cfg["page"])
+                    st.switch_page(c["page"])
 
-# ── Separador + Footer ────────────────────────────────────────────────────────
+# ── Footer ────────────────────────────────────────────────────────────────────
 st.markdown("""
-<div style="margin-top: 50px; padding-top: 20px; border-top: 1px solid #E2E8F0;
-            display: flex; align-items: center; justify-content: space-between;">
-    <div style="font-size:12px; color:#94A3B8;">
-        Go To Market SAC · Dashboard Comercial · 2026
-    </div>
-    <div style="font-size:11px; color:#CBD5E1;">
-        Acceso solo para personal autorizado
-    </div>
+<div class="gtm-footer">
+<div class="gtm-footer-left">Go To Market SAC · Dashboard Comercial · 2026</div>
+<div class="gtm-footer-right">Acceso solo para personal autorizado</div>
 </div>
 """, unsafe_allow_html=True)
