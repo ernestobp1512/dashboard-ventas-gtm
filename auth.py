@@ -121,7 +121,8 @@ def show_login() -> bool:
     }
 
     /* ── El <input> real ── */
-    .stTextInput input {
+    div.stTextInput [data-baseweb="input"] input,
+    div.stTextInput [data-baseweb="base-input"] input {
         border-radius: 10px !important;
         border: 1.5px solid #E2E8F0 !important;
         padding: 10px 14px !important;
@@ -130,27 +131,34 @@ def show_login() -> bool:
         background-color: white !important;
         color: #1E293B !important;
         -webkit-text-fill-color: #1E293B !important;
+        caret-color: #1E293B !important;
         outline: none !important;
         box-shadow: none !important;
         transition: border-color 0.2s;
     }
-    .stTextInput input:focus {
+    div.stTextInput [data-baseweb="input"]:focus-within input,
+    div.stTextInput [data-baseweb="base-input"]:focus-within input,
+    div.stTextInput [data-baseweb="input"] input:focus,
+    div.stTextInput [data-baseweb="base-input"] input:focus {
         border-color: #DC2626 !important;
         box-shadow: 0 0 0 3px rgba(220,38,38,0.12) !important;
         background: white !important;
         background-color: white !important;
         color: #1E293B !important;
         -webkit-text-fill-color: #1E293B !important;
+        caret-color: #1E293B !important;
         outline: none !important;
     }
     
     /* ── Autocomplete/Autofill fix para contraste ── */
-    .stTextInput input:-webkit-autofill,
-    .stTextInput input:-webkit-autofill:hover, 
-    .stTextInput input:-webkit-autofill:focus, 
-    .stTextInput input:-webkit-autofill:active {
+    div.stTextInput [data-baseweb="input"] input:-webkit-autofill,
+    div.stTextInput [data-baseweb="input"] input:-webkit-autofill:hover, 
+    div.stTextInput [data-baseweb="input"] input:-webkit-autofill:focus, 
+    div.stTextInput [data-baseweb="input"] input:-webkit-autofill:active {
         -webkit-box-shadow: 0 0 0 30px white inset !important;
         -webkit-text-fill-color: #1E293B !important;
+        color: #1E293B !important;
+        caret-color: #1E293B !important;
     }
 
     /* ── Label del campo ── */
