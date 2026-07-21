@@ -107,54 +107,41 @@ def show_login() -> bool:
         padding-right: 1rem !important;
     }
 
-    /* ── Wrapper del input: quitar estilos base en todo estado ── */
-    [data-testid="stTextInput"] [data-baseweb="input"],
-    [data-testid="stTextInput"] [data-baseweb="base-input"] {
-        border: none !important;
-        box-shadow: none !important;
-        background: transparent !important;
-        background-color: transparent !important;
-    }
-
-    /* ── El <input> real (Global para mayor fuerza) ── */
-    [data-testid="stTextInput"] input[type="text"],
-    [data-testid="stTextInput"] input[type="password"] {
+    /* ── Wrapper del input (aquí va el borde y fondo para igualar anchos) ── */
+    [data-testid="stTextInput"] [data-baseweb="input"] {
         border-radius: 10px !important;
         border: 1.5px solid #E2E8F0 !important;
-        padding: 10px 14px !important;
-        font-size: 14px !important;
         background: white !important;
         background-color: white !important;
-        color: #1E293B !important;
-        -webkit-text-fill-color: #1E293B !important;
-        caret-color: #1E293B !important;
-        outline: none !important;
-        box-shadow: none !important;
-        transition: border-color 0.2s;
+        transition: border-color 0.2s, box-shadow 0.2s !important;
+        padding-right: 8px !important; /* Espacio para el ojito de password */
     }
-    
-    [data-testid="stTextInput"] input[type="text"]:focus,
-    [data-testid="stTextInput"] input[type="password"]:focus {
+    [data-testid="stTextInput"] [data-baseweb="input"]:focus-within {
         border-color: #DC2626 !important;
         box-shadow: 0 0 0 3px rgba(220,38,38,0.12) !important;
-        background: white !important;
-        background-color: white !important;
+    }
+
+    /* ── El <input> real (Fondo transparente, toma el color del wrapper) ── */
+    [data-testid="stTextInput"] input[type="text"],
+    [data-testid="stTextInput"] input[type="password"] {
+        background: transparent !important;
+        background-color: transparent !important;
         color: #1E293B !important;
-        -webkit-text-fill-color: #1E293B !important;
         caret-color: #1E293B !important;
+        padding: 10px 14px !important;
+        font-size: 14px !important;
+        border: none !important;
+        box-shadow: none !important;
         outline: none !important;
     }
     
-    /* ── Autocomplete/Autofill fix para contraste ── */
+    /* ── Autocomplete/Autofill Ultimate Hack ── */
     [data-testid="stTextInput"] input:-webkit-autofill,
     [data-testid="stTextInput"] input:-webkit-autofill:hover, 
     [data-testid="stTextInput"] input:-webkit-autofill:focus, 
     [data-testid="stTextInput"] input:-webkit-autofill:active {
-        -webkit-box-shadow: 0 0 0 30px white inset !important;
+        transition: background-color 5000s ease-in-out 0s, color 5000s ease-in-out 0s !important;
         -webkit-text-fill-color: #1E293B !important;
-        color: #1E293B !important;
-        caret-color: #1E293B !important;
-        background-color: white !important;
     }
 
     /* ── Label del campo ── */
