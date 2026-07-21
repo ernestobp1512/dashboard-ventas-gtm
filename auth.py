@@ -108,14 +108,22 @@ def show_login() -> bool:
         border: 1.5px solid #E2E8F0 !important;
         padding: 10px 14px !important;
         font-size: 14px !important;
-        background: #FAFAFA !important;
+        background: white !important;
+        color: #1E293B !important;
         transition: border 0.2s, box-shadow 0.2s;
     }
     .stTextInput input:focus {
         border-color: #DC2626 !important;
         box-shadow: 0 0 0 3px rgba(220,38,38,0.1) !important;
         background: white !important;
+        color: #1E293B !important;
     }
+    .stTextInput label, .stTextInput label p {
+        color: #475569 !important;
+        font-weight: 600 !important;
+        font-size: 13px !important;
+    }
+
 
     /* Botón de login */
     div[data-testid="stButton"] > button[kind="primary"] {

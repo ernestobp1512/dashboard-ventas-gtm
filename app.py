@@ -142,38 +142,53 @@ CARD_STYLE = {
     "provincia": {"border": "#16A34A", "bg_icon": "#F0FDF4"},
 }
 
+# CSS extra para los botones de cada tarjeta
+CARD_BTN_CSS = {
+    "lima":      "background: #DC2626;",
+    "norte":     "background: #2563EB;",
+    "provincia": "background: #16A34A;",
+}
+
 if pages:
     cols = st.columns(len(pages), gap="large")
     for i, page_key in enumerate(pages):
         info  = auth.PAGE_INFO[page_key]
         style = CARD_STYLE[page_key]
         with cols[i]:
-            # Tarjeta visual
-            st.markdown(f"""
-            <div class="dash-card" style="border-top: 4px solid {info['color']};">
-                <div style="
-                    display:inline-flex;
-                    align-items:center;
-                    justify-content:center;
-                    width:64px; height:64px;
-                    background:{style['bg_icon']};
-                    border-radius:16px;
-                    font-size:32px;
-                    margin-bottom:14px;
-                ">
-                    {info['icon']}
+            with st.container(border=True):
+                # Icono + título + descripción
+                st.markdown(f"""
+                <div style="padding: 6px 0 14px 0;">
+                    <div style="
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        width: 64px; height: 64px;
+                        background: {style['bg_icon']};
+                        border-radius: 16px;
+                        font-size: 32px;
+                        margin-bottom: 14px;
+                    ">{info['icon']}</div>
+                    <div style="font-size:20px; font-weight:800;
+                                color:{info['color']}; margin-bottom:6px;">
+                        {info['label']}
+                    </div>
+                    <div style="font-size:13px; color:#64748B;
+                                line-height:1.5; margin-bottom:18px;">
+                        {info['desc']}
+                    </div>
                 </div>
-                <div class="card-title" style="color:{info['color']};">{info['label']}</div>
-                <div class="card-desc">{info['desc']}</div>
-            </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
 
-            # Botón de acceso con st.page_link (nativo de Streamlit)
-            st.page_link(
-                info["page"],
-                label=f"Abrir {info['label']} →",
-                use_container_width=True,
-            )
+                # Botón de navegación — st.button + st.switch_page es
+                # más confiable que st.page_link en todas las versiones
+                if st.button(
+                    f"Abrir {info['label']} →",
+                    key=f"goto_{page_key}",
+                    use_container_width=True,
+                    type="primary",
+                ):
+                    st.switch_page(info["page"])
 
 # ── Footer ────────────────────────────────────────────────────────────────────
 st.markdown("""
