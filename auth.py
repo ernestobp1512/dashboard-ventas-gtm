@@ -114,11 +114,18 @@ def show_login() -> bool:
         background: white !important;
         background-color: white !important;
         transition: border-color 0.2s, box-shadow 0.2s !important;
-        padding-right: 8px !important; /* Espacio para el ojito de password */
+        overflow: hidden !important;
     }
+    
     [data-testid="stTextInput"] [data-baseweb="input"]:focus-within {
         border-color: #DC2626 !important;
         box-shadow: 0 0 0 3px rgba(220,38,38,0.12) !important;
+    }
+
+    /* Quitar cualquier fondo oscuro interno de Streamlit */
+    [data-testid="stTextInput"] [data-baseweb="base-input"] {
+        background: transparent !important;
+        background-color: transparent !important;
     }
 
     /* ── El <input> real (Fondo transparente, toma el color del wrapper) ── */
@@ -140,8 +147,15 @@ def show_login() -> bool:
     [data-testid="stTextInput"] input:-webkit-autofill:hover, 
     [data-testid="stTextInput"] input:-webkit-autofill:focus, 
     [data-testid="stTextInput"] input:-webkit-autofill:active {
-        transition: background-color 5000s ease-in-out 0s, color 5000s ease-in-out 0s !important;
+        -webkit-box-shadow: 0 0 0 1000px white inset !important;
         -webkit-text-fill-color: #1E293B !important;
+        transition: background-color 5000s ease-in-out 0s, color 5000s ease-in-out 0s !important;
+    }
+
+    /* ── Ícono del ojito (contraseña) ── */
+    [data-testid="stTextInput"] svg {
+        fill: #475569 !important;
+        color: #475569 !important;
     }
 
     /* ── Label del campo ── */
