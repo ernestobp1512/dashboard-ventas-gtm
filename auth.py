@@ -64,12 +64,17 @@ PAGE_INFO: dict = {
 
 def _do_login() -> None:
     """Callback para el formulario de login."""
+    # Evitar doble ejecución (on_change + on_click)
+    if st.session_state.get("auth_ok"):
+        return
+
     user = st.session_state.get("_auth_user", "").strip().lower()
     pwd  = st.session_state.get("_auth_pwd", "")
 
     if user in USERS and hmac.compare_digest(USERS[user]["password"], pwd):
         st.session_state["auth_ok"]   = True
         st.session_state["auth_user"] = user
+        st.session_state["auth_error"] = False
         st.session_state.pop("_auth_pwd", None)
     else:
         st.session_state["auth_ok"]    = False
