@@ -107,16 +107,17 @@ def show_login() -> bool:
         padding-right: 1rem !important;
     }
 
-    /* ── Wrapper del input: quitar la sombra/borde extra de Streamlit ── */
-    .stTextInput [data-baseweb="input"] {
+    /* ── Wrapper del input: quitar estilos base en todo estado ── */
+    .stTextInput [data-baseweb="input"],
+    .stTextInput [data-baseweb="base-input"],
+    .stTextInput [data-baseweb="input"]:focus,
+    .stTextInput [data-baseweb="base-input"]:focus,
+    .stTextInput [data-baseweb="input"]:focus-within,
+    .stTextInput [data-baseweb="base-input"]:focus-within {
         border: none !important;
         box-shadow: none !important;
         background: transparent !important;
-    }
-    .stTextInput [data-baseweb="base-input"] {
-        border: none !important;
-        box-shadow: none !important;
-        background: transparent !important;
+        background-color: transparent !important;
     }
 
     /* ── El <input> real ── */
@@ -126,7 +127,9 @@ def show_login() -> bool:
         padding: 10px 14px !important;
         font-size: 14px !important;
         background: white !important;
+        background-color: white !important;
         color: #1E293B !important;
+        -webkit-text-fill-color: #1E293B !important;
         outline: none !important;
         box-shadow: none !important;
         transition: border-color 0.2s;
@@ -135,7 +138,9 @@ def show_login() -> bool:
         border-color: #DC2626 !important;
         box-shadow: 0 0 0 3px rgba(220,38,38,0.12) !important;
         background: white !important;
+        background-color: white !important;
         color: #1E293B !important;
+        -webkit-text-fill-color: #1E293B !important;
         outline: none !important;
     }
     
