@@ -91,8 +91,8 @@ def show_login() -> bool:
     html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
 
     /* Ocultar sidebar en la pantalla de login */
-    [data-testid="stSidebar"]       { display: none !important; }
-    [data-testid="collapsedControl"]{ display: none !important; }
+    [data-testid="stSidebar"]        { display: none !important; }
+    [data-testid="collapsedControl"] { display: none !important; }
 
     /* Centrar y limitar ancho del contenido */
     .main .block-container {
@@ -102,7 +102,19 @@ def show_login() -> bool:
         padding-right: 1rem !important;
     }
 
-    /* Inputs */
+    /* ── Wrapper del input: quitar la sombra/borde extra de Streamlit ── */
+    .stTextInput [data-baseweb="input"] {
+        border: none !important;
+        box-shadow: none !important;
+        background: transparent !important;
+    }
+    .stTextInput [data-baseweb="base-input"] {
+        border: none !important;
+        box-shadow: none !important;
+        background: transparent !important;
+    }
+
+    /* ── El <input> real ── */
     .stTextInput input {
         border-radius: 10px !important;
         border: 1.5px solid #E2E8F0 !important;
@@ -110,22 +122,33 @@ def show_login() -> bool:
         font-size: 14px !important;
         background: white !important;
         color: #1E293B !important;
-        transition: border 0.2s, box-shadow 0.2s;
+        outline: none !important;
+        box-shadow: none !important;
+        transition: border-color 0.2s;
     }
     .stTextInput input:focus {
         border-color: #DC2626 !important;
-        box-shadow: 0 0 0 3px rgba(220,38,38,0.1) !important;
+        box-shadow: 0 0 0 3px rgba(220,38,38,0.12) !important;
         background: white !important;
         color: #1E293B !important;
+        outline: none !important;
     }
+
+    /* ── Label del campo ── */
     .stTextInput label, .stTextInput label p {
         color: #475569 !important;
         font-weight: 600 !important;
         font-size: 13px !important;
     }
 
+    /* ── Ocultar el texto "Press Enter to apply" que pone Streamlit ── */
+    .stTextInput [data-testid="InputInstructions"],
+    .stTextInput small,
+    .stTextInput [class*="instructions"] {
+        display: none !important;
+    }
 
-    /* Botón de login */
+    /* ── Botón de login ── */
     div[data-testid="stButton"] > button[kind="primary"] {
         background: linear-gradient(135deg, #DC2626, #991B1B) !important;
         color: white !important;
@@ -134,16 +157,19 @@ def show_login() -> bool:
         font-size: 15px !important;
         padding: 12px !important;
         border: none !important;
+        box-shadow: 0 4px 12px rgba(220,38,38,0.3) !important;
         width: 100% !important;
         margin-top: 6px !important;
         letter-spacing: 0.3px;
-        transition: opacity 0.2s !important;
+        transition: opacity 0.2s, box-shadow 0.2s !important;
     }
     div[data-testid="stButton"] > button[kind="primary"]:hover {
-        opacity: 0.88 !important;
+        opacity: 0.90 !important;
+        box-shadow: 0 6px 18px rgba(220,38,38,0.4) !important;
     }
     </style>
     """, unsafe_allow_html=True)
+
 
     # ── Logo y marca ──────────────────────────────────────────────────────────
     st.markdown("""
