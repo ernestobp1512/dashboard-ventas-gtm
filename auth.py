@@ -108,21 +108,17 @@ def show_login() -> bool:
     }
 
     /* ── Wrapper del input: quitar estilos base en todo estado ── */
-    .stTextInput [data-baseweb="input"],
-    .stTextInput [data-baseweb="base-input"],
-    .stTextInput [data-baseweb="input"]:focus,
-    .stTextInput [data-baseweb="base-input"]:focus,
-    .stTextInput [data-baseweb="input"]:focus-within,
-    .stTextInput [data-baseweb="base-input"]:focus-within {
+    [data-testid="stTextInput"] [data-baseweb="input"],
+    [data-testid="stTextInput"] [data-baseweb="base-input"] {
         border: none !important;
         box-shadow: none !important;
         background: transparent !important;
         background-color: transparent !important;
     }
 
-    /* ── El <input> real ── */
-    div.stTextInput [data-baseweb="input"] input,
-    div.stTextInput [data-baseweb="base-input"] input {
+    /* ── El <input> real (Global para mayor fuerza) ── */
+    [data-testid="stTextInput"] input[type="text"],
+    [data-testid="stTextInput"] input[type="password"] {
         border-radius: 10px !important;
         border: 1.5px solid #E2E8F0 !important;
         padding: 10px 14px !important;
@@ -136,10 +132,9 @@ def show_login() -> bool:
         box-shadow: none !important;
         transition: border-color 0.2s;
     }
-    div.stTextInput [data-baseweb="input"]:focus-within input,
-    div.stTextInput [data-baseweb="base-input"]:focus-within input,
-    div.stTextInput [data-baseweb="input"] input:focus,
-    div.stTextInput [data-baseweb="base-input"] input:focus {
+    
+    [data-testid="stTextInput"] input[type="text"]:focus,
+    [data-testid="stTextInput"] input[type="password"]:focus {
         border-color: #DC2626 !important;
         box-shadow: 0 0 0 3px rgba(220,38,38,0.12) !important;
         background: white !important;
@@ -151,14 +146,15 @@ def show_login() -> bool:
     }
     
     /* ── Autocomplete/Autofill fix para contraste ── */
-    div.stTextInput [data-baseweb="input"] input:-webkit-autofill,
-    div.stTextInput [data-baseweb="input"] input:-webkit-autofill:hover, 
-    div.stTextInput [data-baseweb="input"] input:-webkit-autofill:focus, 
-    div.stTextInput [data-baseweb="input"] input:-webkit-autofill:active {
+    [data-testid="stTextInput"] input:-webkit-autofill,
+    [data-testid="stTextInput"] input:-webkit-autofill:hover, 
+    [data-testid="stTextInput"] input:-webkit-autofill:focus, 
+    [data-testid="stTextInput"] input:-webkit-autofill:active {
         -webkit-box-shadow: 0 0 0 30px white inset !important;
         -webkit-text-fill-color: #1E293B !important;
         color: #1E293B !important;
         caret-color: #1E293B !important;
+        background-color: white !important;
     }
 
     /* ── Label del campo ── */
